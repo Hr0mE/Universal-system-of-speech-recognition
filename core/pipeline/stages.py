@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-import json
-import logging
+from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from core.pipeline.context import PipelineContext, Segment
 from core.pipeline.stage import Stage
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from core.models.base import (
+        ASRModel,
+        DiarizationModel,
+        LanguageModel,
+    )
 
 
 class DummyStage(Stage):
@@ -17,14 +22,14 @@ class DummyStage(Stage):
         segments: list[Segment],
         context: PipelineContext,
     ) -> list[Segment]:
-        logger.info("DummyStage: passing through %d segments", len(segments))
         return segments
 
 
 class FixedWindowSegmentationStage(Stage):
     """Cuts the audio timeline into fixed-length windows.
 
-    Stage 1: produces only time intervals — the audio file itself is not sliced.
+    Pure transformation: produces time intervals only. Persistence is handled
+    by the engine via RunManager.
     """
 
     name = "segmentation"
@@ -52,15 +57,61 @@ class FixedWindowSegmentationStage(Stage):
             result.append(Segment(start_time=start, end_time=end))
             start = end
 
-        out_path = context.run_dir / "segments.json"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(
-                [s.to_dict() for s in result], indent=2, ensure_ascii=False
-            ),
-            encoding="utf-8",
-        )
-        logger.info(
-            "Segmentation produced %d segments → %s", len(result), out_path
-        )
         return result
+
+
+class DiarizationStage(Stage):
+    """Produces initial speaker-labelled segments via a DiarizationModel.
+
+    Discards any incoming segments — diarization is a source, not a filter.
+    """
+
+    name = "diarization"
+
+    def __init__(self, model: "DiarizationModel") -> None:
+        self.model = model
+
+    def run(
+        self,
+        segments: list[Segment],
+        context: PipelineContext,
+    ) -> list[Segment]:
+        return self.model.diarize(context)
+
+
+class LanguageDetectionStage(Stage):
+    """Fills `segment.language` for every segment using a LanguageModel."""
+
+    name = "language_detection"
+
+    def __init__(self, model: "LanguageModel") -> None:
+        self.model = model
+
+    def run(
+        self,
+        segments: list[Segment],
+        context: PipelineContext,
+    ) -> list[Segment]:
+        return [
+            replace(s, language=self.model.detect(s, context))
+            for s in segments
+        ]
+
+
+class ASRStage(Stage):
+    """Fills `segment.text` for every segment using an ASRModel."""
+
+    name = "asr"
+
+    def __init__(self, model: "ASRModel") -> None:
+        self.model = model
+
+    def run(
+        self,
+        segments: list[Segment],
+        context: PipelineContext,
+    ) -> list[Segment]:
+        return [
+            replace(s, text=self.model.transcribe(s, context))
+            for s in segments
+        ]
