@@ -1,0 +1,104 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyd
+*.so
+.Python
+*.egg
+*.egg-info
+.eggs/
+
+# Build / packaging
+build/
+dist/
+wheels/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+
+# Pipeline artifacts (run outputs, intermediate files, run-scoped DBs)
+runs/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+# Logs
+logs/
+*.log
+
+# Model weights (downloaded by user, not source)
+*.bin
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+*.gguf
+*.tflite
+.cache/
+hf_cache/
+model_cache/
+
+# Audio and work files
+assets
+recordings/
+samples/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.opus
+*.aac
+*.wma
+*.sh
+
+# PyInstaller
+*.manifest
+
+# IDE / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Type checkers / linters
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.pytype/
+.pyre/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+secrets/
+credentials.json
+configs/local/
+*.local.yaml
+*.local.yml
