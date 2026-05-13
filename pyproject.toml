@@ -5,7 +5,26 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cuda-bindings>=13.2.0",
+    "faster-whisper>=1.2.1",
+    "fonttools>=4.62.1",
+    "grpcio>=1.80.0",
+    "matplotlib>=3.10.9",
+    "nvidia-cublas>=13.1.0.3",
+    "nvidia-cuda-nvrtc>=13.0.88",
+    "nvidia-cudnn-cu13>=9.19.0.56",
+    "nvidia-curand>=10.4.0.35",
+    "nvidia-cusolver>=12.0.4.66",
+    "nvidia-cusparselt-cu13>=0.8.0",
+    "nvidia-nvjitlink>=13.0.88",
+    "nvidia-nvshmem-cu13>=3.4.5",
+    "pandas>=3.0.3",
+    "pyannote-audio>=4.0.4",
+    "python-dotenv>=1.0",
     "pyyaml>=6.0",
+    "scipy>=1.17.1",
+    "torch>=2.11.0",
+    "triton>=3.6.0",
 ]
 
 [dependency-groups]
@@ -16,3 +35,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: real ML / network I/O (deselect with -m 'not integration')",
+]

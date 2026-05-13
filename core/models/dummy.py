@@ -5,7 +5,7 @@ from core.pipeline.context import PipelineContext, Segment
 
 
 class DummyASR(ASRModel):
-    name = "dummy-asr"
+    name = "dummy"
 
     def transcribe(self, segment: Segment, context: PipelineContext) -> str:
         return (
@@ -14,7 +14,7 @@ class DummyASR(ASRModel):
 
 
 class DummyLanguageModel(LanguageModel):
-    name = "dummy-lid"
+    name = "dummy"
 
     def __init__(self, language: str = "en") -> None:
         self.language = language
@@ -24,7 +24,7 @@ class DummyLanguageModel(LanguageModel):
 
 
 class DummyDiarization(DiarizationModel):
-    name = "dummy-diar"
+    name = "dummy"
 
     def diarize(self, context: PipelineContext) -> list[Segment]:
         return [

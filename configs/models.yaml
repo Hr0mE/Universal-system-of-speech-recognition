@@ -1,0 +1,7 @@
+asr:
+  name: dummy
+
+language_detection:
+  name: dummy
+  params:
+    language: en

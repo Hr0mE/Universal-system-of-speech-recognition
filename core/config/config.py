@@ -12,6 +12,7 @@ class RunConfig:
     audio_duration: float
     window_seconds: float
     stages: list[str] = field(default_factory=list)
+    models: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

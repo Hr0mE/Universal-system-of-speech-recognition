@@ -135,3 +135,23 @@ def test_engine_works_without_run_manager(
     segments = engine.run(context)
     assert len(segments) == 1
     assert s1.calls == 1
+
+
+def test_on_stage_skipped_hook_called_for_each_skipped_stage(
+    run_manager, context, recording_stage_factory
+):
+    s1 = recording_stage_factory("dummy")
+    s2 = recording_stage_factory("segmentation")
+    s3 = recording_stage_factory("asr")
+
+    state = PipelineState(run_id=context.run_id)
+    state.mark_stage_done(1, "dummy")
+    state.mark_stage_done(2, "segmentation")
+
+    engine = PipelineEngine(stages=[s1, s2, s3], run_manager=run_manager)
+    engine.run(context, initial_segments=[], state=state)
+
+    assert s1.skipped_calls == 1
+    assert s2.skipped_calls == 1
+    assert s3.skipped_calls == 0  # s3 actually ran
+    assert s3.calls == 1

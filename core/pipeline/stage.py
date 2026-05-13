@@ -17,3 +17,6 @@ class Stage(ABC):
         context: "PipelineContext",
     ) -> list["Segment"]:
         ...
+
+    def on_stage_skipped(self, context: "PipelineContext") -> None:
+        """Called when this stage is skipped during resume. Override if needed."""

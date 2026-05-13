@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections import defaultdict
 from typing import Callable, TypeVar
 
@@ -22,22 +23,27 @@ class EventBus:
 
     def __init__(self) -> None:
         self._handlers: dict[type, list[Handler]] = defaultdict(list)
+        self._lock = threading.RLock()
 
     def subscribe(
         self, event_type: type[E], handler: Handler
     ) -> Callable[[], None]:
-        self._handlers[event_type].append(handler)
+        with self._lock:
+            self._handlers[event_type].append(handler)
 
         def unsubscribe() -> None:
-            try:
-                self._handlers[event_type].remove(handler)
-            except ValueError:
-                pass
+            with self._lock:
+                try:
+                    self._handlers[event_type].remove(handler)
+                except ValueError:
+                    pass
 
         return unsubscribe
 
     def publish(self, event: PipelineEvent) -> None:
-        for handler in list(self._handlers.get(type(event), ())):
+        with self._lock:
+            handlers = list(self._handlers.get(type(event), ()))
+        for handler in handlers:
             try:
                 handler(event)
             except Exception:

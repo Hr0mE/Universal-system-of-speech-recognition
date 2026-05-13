@@ -1,0 +1,30 @@
+asr:
+  name: faster-whisper
+  params:
+    model_size: models/faster-whisper-tiny
+    language: null
+    device: cpu
+    compute_type: int8
+
+language_detection:
+  name: whisper-lid
+  params:
+    model_size: models/faster-whisper-tiny
+    device: cpu
+    compute_type: int8
+
+asr_per_language:
+  en:
+    name: faster-whisper
+    params:
+      model_size: models/faster-whisper-tiny
+      language: en
+      device: cpu
+      compute_type: int8
+  ru:
+    name: faster-whisper
+    params:
+      model_size: models/faster-whisper-tiny
+      language: ru
+      device: cpu
+      compute_type: int8

@@ -15,6 +15,7 @@ class RecordingStage(Stage):
     def __init__(self, name: str) -> None:
         self.name = name
         self.calls = 0
+        self.skipped_calls = 0
 
     def run(
         self,
@@ -30,6 +31,9 @@ class RecordingStage(Stage):
                 speaker_id=self.name,
             ),
         ]
+
+    def on_stage_skipped(self, context: PipelineContext) -> None:
+        self.skipped_calls += 1
 
 
 class BoomStage(Stage):

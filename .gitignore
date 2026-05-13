@@ -22,6 +22,8 @@ env/
 ENV/
 
 # Pipeline artifacts (run outputs, intermediate files, run-scoped DBs)
+out/
+docs/
 runs/
 *.sqlite
 *.sqlite3
@@ -44,6 +46,7 @@ logs/
 .cache/
 hf_cache/
 model_cache/
+models/
 
 # Audio and work files
 assets

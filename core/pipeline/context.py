@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.events.bus import EventBus
 
 
 @dataclass
@@ -28,3 +31,5 @@ class PipelineContext:
     run_dir: Path
     audio_duration: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
+    event_bus: "EventBus | None" = field(default=None, repr=False, compare=False)
+    current_stage_index: int = field(default=0, repr=False, compare=False)

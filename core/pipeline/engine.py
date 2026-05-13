@@ -60,9 +60,12 @@ class PipelineEngine:
         if self.run_manager is not None:
             self.run_manager.save_state(context.run_dir, state)
 
+        context.event_bus = self.event_bus
+
         try:
             for index, stage in enumerate(self.stages, start=1):
                 if index <= resume_after:
+                    stage.on_stage_skipped(context)
                     self.event_bus.publish(
                         StageSkipped(
                             run_id=context.run_id,
@@ -80,6 +83,7 @@ class PipelineEngine:
                     )
                 )
 
+                context.current_stage_index = index
                 segments = stage.run(segments, context)
 
                 state.mark_stage_done(index, stage.name)
