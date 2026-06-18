@@ -24,7 +24,9 @@ ENV/
 # Pipeline artifacts (run outputs, intermediate files, run-scoped DBs)
 out/
 docs/
+projects/
 runs/
+ux-pilot/
 *.sqlite
 *.sqlite3
 *.db
@@ -33,6 +35,7 @@ runs/
 # Logs
 logs/
 *.log
+*.json
 
 # Model weights (downloaded by user, not source)
 *.bin
@@ -47,6 +50,8 @@ logs/
 hf_cache/
 model_cache/
 models/
+.agents/
+.claude/
 
 # Audio and work files
 assets

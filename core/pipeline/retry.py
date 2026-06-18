@@ -1,3 +1,8 @@
+"""Утилита повторных попыток при сбоях ML-моделей.
+
+Используется стадиями ASR и LID для обеспечения устойчивости к временным ошибкам.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -9,7 +14,19 @@ def retry_on_error(
     retries: int = 3,
     logger: logging.Logger | None = None,
 ) -> Any | None:
-    """Calls fn() up to `retries` times. Returns None if all attempts raise."""
+    """Вызывает функцию до ``retries`` раз.  При всех неудачах возвращает ``None``.
+
+    Args:
+        fn (Callable[[], Any]): Функция без аргументов для вызова.
+        retries (int): Максимальное число попыток (не менее 1).
+        logger (logging.Logger | None): Логгер для предупреждений при сбоях.
+
+    Returns:
+        Any | None: Результат первого успешного вызова или ``None``.
+
+    Raises:
+        ValueError: Если ``retries`` < 1.
+    """
     if retries < 1:
         raise ValueError(f"retries must be >= 1, got {retries}")
     for attempt in range(1, retries + 1):

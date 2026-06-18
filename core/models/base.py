@@ -1,3 +1,10 @@
+"""Абстрактные базовые классы ML-моделей.
+
+Определяет интерфейсы :class:`ASRModel`, :class:`LanguageModel` и
+:class:`DiarizationModel`, которые реализуются конкретными бэкендами
+(Whisper, Pyannote и др.).
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -18,11 +25,19 @@ class ASRModel(ABC):
         segment: "Segment",
         context: "PipelineContext",
     ) -> str:
-        ...
+        """Транскрибирует аудиосегмент и возвращает текст.
+
+        Args:
+            segment (Segment): Временной интервал для распознавания.
+            context (PipelineContext): Контекст с путём к аудиофайлу.
+
+        Returns:
+            str: Распознанный текст или пустая строка.
+        """
 
 
 class LanguageModel(ABC):
-    """Predicts the spoken language code (e.g. 'en', 'ru') for a segment."""
+    """Определяет код разговорного языка сегмента (например, ``'ru'``, ``'en'``)."""
 
     name: str
 
@@ -32,14 +47,29 @@ class LanguageModel(ABC):
         segment: "Segment",
         context: "PipelineContext",
     ) -> str:
-        ...
+        """Определяет язык аудиосегмента.
+
+        Args:
+            segment (Segment): Временной интервал для анализа.
+            context (PipelineContext): Контекст с путём к аудиофайлу.
+
+        Returns:
+            str: Код языка ISO 639-1 (например, ``'ru'``).
+        """
 
 
 class DiarizationModel(ABC):
-    """Produces speaker-labelled segment boundaries for the whole recording."""
+    """Определяет границы сегментов с метками говорящих для всей записи."""
 
     name: str
 
     @abstractmethod
     def diarize(self, context: "PipelineContext") -> list["Segment"]:
-        ...
+        """Выполняет диаризацию всей записи.
+
+        Args:
+            context (PipelineContext): Контекст с путём к аудиофайлу.
+
+        Returns:
+            list[Segment]: Сегменты с заполненным ``speaker_id``.
+        """

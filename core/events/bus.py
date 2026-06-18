@@ -1,3 +1,9 @@
+"""Синхронная шина событий для pipeline.
+
+Содержит :class:`EventBus` — механизм публикации/подписки, связывающий
+pipeline с UI и логированием без прямых зависимостей между ними.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +34,15 @@ class EventBus:
     def subscribe(
         self, event_type: type[E], handler: Handler
     ) -> Callable[[], None]:
+        """Регистрирует обработчик для указанного типа события.
+
+        Args:
+            event_type (type[E]): Класс события для подписки.
+            handler (Handler): Callable, принимающий экземпляр события.
+
+        Returns:
+            Callable[[], None]: Функция отписки — вызов удаляет обработчик.
+        """
         with self._lock:
             self._handlers[event_type].append(handler)
 
@@ -41,6 +56,15 @@ class EventBus:
         return unsubscribe
 
     def publish(self, event: PipelineEvent) -> None:
+        """Публикует событие всем подписанным обработчикам.
+
+        Обработчики вызываются синхронно в порядке подписки.
+        Исключения из обработчиков перехватываются и логируются,
+        не прерывая остальные обработчики.
+
+        Args:
+            event (PipelineEvent): Событие для публикации.
+        """
         with self._lock:
             handlers = list(self._handlers.get(type(event), ()))
         for handler in handlers:

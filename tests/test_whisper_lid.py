@@ -166,13 +166,13 @@ def test_get_audio_caches_after_first_load(tmp_path: Path):
     fake_samples = np.zeros(16_000, dtype=np.float32)
 
     with patch(
-        "faster_whisper.audio.decode_audio", return_value=fake_samples
-    ) as mock_decode:
+        "core.models.whisper_utils._load_wav", return_value=fake_samples
+    ) as mock_load:
         lid = WhisperLanguageDetector()
         _ = lid._get_audio(audio_file)
         _ = lid._get_audio(audio_file)
 
-    mock_decode.assert_called_once()
+    mock_load.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

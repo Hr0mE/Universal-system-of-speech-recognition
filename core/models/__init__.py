@@ -1,3 +1,5 @@
+"""Реестр ML-моделей и ленивые фабрики faster-whisper, whisper-lid, pyannote."""
+
 from __future__ import annotations
 
 from core.models.dummy import DummyASR, DummyDiarization, DummyLanguageModel
@@ -26,7 +28,14 @@ def _make_pyannote(**kwargs):
 
 
 def default_registry() -> ModelRegistry:
-    """Registry pre-populated with dummy models and faster-whisper."""
+    """Создаёт реестр с предустановленными моделями.
+
+    Регистрирует dummy-реализации, faster-whisper, whisper-lid и pyannote
+    через ленивые фабрики (импорт происходит только при первом вызове create_*).
+
+    Returns:
+        ModelRegistry: Готовый реестр моделей.
+    """
     registry = ModelRegistry()
     registry.register_asr("dummy", DummyASR)
     registry.register_language("dummy", DummyLanguageModel)

@@ -1,13 +1,19 @@
+"""Состояние выполнения pipeline и константы статусов.
+
+Используется :class:`PipelineEngine` для отслеживания прогресса и поддержки
+возобновления прерванных запусков (resume).
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-# Status values: pending | running | completed | failed
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
+STATUS_STOPPED = "stopped"
 
 
 @dataclass
@@ -25,15 +31,34 @@ class PipelineState:
     status: str = STATUS_PENDING
 
     def mark_stage_done(self, index: int, name: str) -> None:
+        """Отмечает стадию как завершённую.
+
+        Args:
+            index (int): 1-based индекс завершённой стадии.
+            name (str): Имя стадии.
+        """
         self.last_stage_index = index
         if name not in self.completed_stages:
             self.completed_stages.append(name)
 
     def to_dict(self) -> dict[str, Any]:
+        """Сериализует состояние в словарь для записи в state.json.
+
+        Returns:
+            dict[str, Any]: Словарь с полями dataclass.
+        """
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PipelineState":
+        """Восстанавливает состояние из словаря, прочитанного из state.json.
+
+        Args:
+            data (dict[str, Any]): Словарь с полями состояния.
+
+        Returns:
+            PipelineState: Восстановленный объект состояния.
+        """
         return cls(
             run_id=data["run_id"],
             completed_stages=list(data.get("completed_stages", [])),

@@ -189,20 +189,18 @@ def test_transcribe_passes_language_to_whisper(mock_audio, mock_model):
 
 def test_get_audio_caches_after_first_load(tmp_path: Path):
     audio_file = tmp_path / "test.wav"
-    audio_file.write_bytes(b"")  # content doesn't matter — we mock decode_audio
+    audio_file.write_bytes(b"")  # content doesn't matter — we mock _load_wav
 
     fake_samples = np.zeros(16_000, dtype=np.float32)
 
-    # decode_audio is imported lazily inside _get_audio, so we patch the
-    # source in faster_whisper.audio (that's where the name is resolved).
     with patch(
-        "faster_whisper.audio.decode_audio", return_value=fake_samples
-    ) as mock_decode:
+        "core.models.whisper_utils._load_wav", return_value=fake_samples
+    ) as mock_load:
         asr = FasterWhisperASR()
         _ = asr._get_audio(audio_file)
         _ = asr._get_audio(audio_file)
 
-    mock_decode.assert_called_once()
+    mock_load.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

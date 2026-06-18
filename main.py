@@ -1,21 +1,36 @@
+"""CLI-точка входа приложения транскрибации.
+
+Запускает pipeline транскрибации в режиме командной строки.
+Для GUI-режима используйте ``python gui.py``.
+
+Примеры:
+    Транскрибировать файл::
+
+        python main.py audio.wav
+
+    Возобновить прерванный запуск::
+
+        python main.py --resume run_20240605_143022_abc123
+"""
+
 from __future__ import annotations
 
 import argparse
 import logging
-import secrets
 import sys
-import wave
-from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from core.config.config import RunConfig
-from core.config.models_config import ModelsConfig, load_models_config
+from core.api.transcribe import transcribe
+from core.export import build_meeting_report, export_json, export_txt
+from core.config.models_config import ModelsConfig
 from core.events.bus import EventBus
 from core.events.events import (
+    ModelDownloadFinished,
+    ModelDownloadStarted,
     PipelineFailed,
     PipelineFinished,
     PipelineStarted,
@@ -27,7 +42,11 @@ from core.models import default_registry
 from core.models.registry import ModelRegistry
 from core.pipeline.context import PipelineContext
 from core.pipeline.engine import PipelineEngine
+from core.pipeline.registry import StageRegistry
 from core.pipeline.stage import Stage
+from core.pipeline.state import PipelineState
+from core.storage.run_manager import RunManager
+from plugins import setup_plugins
 from core.pipeline.stages import (
     ASRStage,
     DiarizationStage,
@@ -35,15 +54,47 @@ from core.pipeline.stages import (
     LanguageDetectionStage,
     MinDurationFilterStage,
 )
-from core.pipeline.state import PipelineState
-from core.storage.run_manager import RunManager
 
 DEFAULT_MODELS_CONFIG = Path("configs/models.yaml")
+
+
+def build_stages(
+    window_seconds: float,
+    models_config: ModelsConfig,
+    registry: ModelRegistry,
+) -> list[Stage]:
+    """Собирает список стадий pipeline из ModelsConfig (используется только CLI)."""
+    asr = registry.create_asr(models_config.asr.name, **models_config.asr.params)
+    lid = registry.create_language(
+        models_config.language_detection.name,
+        **models_config.language_detection.params,
+    )
+    lang_models = {}
+    if models_config.asr_per_language:
+        for lang, spec in models_config.asr_per_language.items():
+            lang_models[lang] = registry.create_asr(spec.name, **spec.params)
+    if models_config.diarization:
+        diar = registry.create_diarization(
+            models_config.diarization.name, **models_config.diarization.params
+        )
+        first_stages: list[Stage] = [DiarizationStage(model=diar), MinDurationFilterStage()]
+    else:
+        first_stages = [FixedWindowSegmentationStage(window_seconds=window_seconds)]
+    return [
+        *first_stages,
+        LanguageDetectionStage(model=lid),
+        ASRStage(model=asr, lang_models=lang_models or None),
+    ]
 
 logger = logging.getLogger("pipeline")
 
 
 def attach_logging_subscriber(bus: EventBus) -> None:
+    """Подписывает функции логирования на все события pipeline.
+
+    Args:
+        bus (EventBus): Шина событий для подписки.
+    """
     def on_pipeline_started(event: PipelineStarted) -> None:
         logger.info(
             "Pipeline started: run_id=%s | audio=%s | stages=%d | resume_after=%d",
@@ -84,65 +135,33 @@ def attach_logging_subscriber(bus: EventBus) -> None:
             "Pipeline FAILED: run_id=%s | %s", event.run_id, event.error
         )
 
+    def on_model_download_started(event: ModelDownloadStarted) -> None:
+        logger.info(
+            "Downloading model: %s (%s)...", event.model_name, event.repo_id
+        )
+
+    def on_model_download_finished(event: ModelDownloadFinished) -> None:
+        logger.info("Model ready: %s", event.model_name)
+
     bus.subscribe(PipelineStarted, on_pipeline_started)
     bus.subscribe(StageStarted, on_stage_started)
     bus.subscribe(StageFinished, on_stage_finished)
     bus.subscribe(StageSkipped, on_stage_skipped)
     bus.subscribe(PipelineFinished, on_pipeline_finished)
     bus.subscribe(PipelineFailed, on_pipeline_failed)
-
-
-def generate_run_id() -> str:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    suffix = secrets.token_hex(3)
-    return f"run_{timestamp}_{suffix}"
-
-
-def read_wav_duration(path: Path) -> float:
-    with wave.open(str(path), "rb") as wf:
-        frames = wf.getnframes()
-        rate = wf.getframerate()
-        if rate == 0:
-            raise ValueError(f"Invalid sample rate in {path}")
-        return frames / float(rate)
-
-
-def build_stages(
-    window_seconds: float,
-    models_config: ModelsConfig,
-    registry: ModelRegistry,
-) -> list[Stage]:
-    asr = registry.create_asr(
-        models_config.asr.name, **models_config.asr.params
-    )
-    lid = registry.create_language(
-        models_config.language_detection.name,
-        **models_config.language_detection.params,
-    )
-    lang_models = {}
-    if models_config.asr_per_language:
-        for lang, spec in models_config.asr_per_language.items():
-            lang_models[lang] = registry.create_asr(spec.name, **spec.params)
-
-    if models_config.diarization:
-        diar = registry.create_diarization(
-            models_config.diarization.name, **models_config.diarization.params
-        )
-        first_stages: list[Stage] = [
-            DiarizationStage(model=diar),
-            MinDurationFilterStage(),
-        ]
-    else:
-        first_stages = [FixedWindowSegmentationStage(window_seconds=window_seconds)]
-
-    return [
-        *first_stages,
-        LanguageDetectionStage(model=lid),
-        ASRStage(model=asr, lang_models=lang_models or None),
-    ]
+    bus.subscribe(ModelDownloadStarted, on_model_download_started)
+    bus.subscribe(ModelDownloadFinished, on_model_download_finished)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Разбирает аргументы командной строки.
+
+    Args:
+        argv (list[str] | None): Список аргументов или ``None`` для sys.argv.
+
+    Returns:
+        argparse.Namespace: Разобранные аргументы.
+    """
     parser = argparse.ArgumentParser(
         description="USSR diplom — local meeting transcription pipeline",
     )
@@ -185,62 +204,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def prepare_fresh_run(
-    args: argparse.Namespace,
-    run_manager: RunManager,
-    registry: ModelRegistry,
-) -> tuple[PipelineContext, list[Stage], PipelineState | None, list | None]:
-    audio_path: Path = args.audio.expanduser().resolve()
-    if not audio_path.exists():
-        raise FileNotFoundError(f"Audio file not found: {audio_path}")
-    if audio_path.suffix.lower() != ".wav":
-        raise ValueError(
-            f"Only .wav is supported at this stage (got: {audio_path.suffix})"
-        )
-
-    models_config_path = args.models_config.expanduser().resolve()
-    if not models_config_path.exists():
-        raise FileNotFoundError(
-            f"Models config not found: {models_config_path}"
-        )
-    models_config = load_models_config(models_config_path)
-
-    duration = read_wav_duration(audio_path)
-    run_id = generate_run_id()
-    stages = build_stages(args.window, models_config, registry)
-
-    config = RunConfig(
-        audio_path=str(audio_path),
-        audio_duration=duration,
-        window_seconds=args.window,
-        stages=[s.name for s in stages],
-        models=models_config.to_dict(),
-    )
-
-    run_dir = run_manager.create_run(run_id)
-    config_path = run_manager.save_config(run_dir, config)
-    logger.info("Config snapshot → %s", config_path)
-
-    context = PipelineContext(
-        run_id=run_id,
-        audio_path=audio_path,
-        run_dir=run_dir,
-        audio_duration=duration,
-    )
-    logger.info(
-        "run_id=%s | audio=%s | duration=%.2fs",
-        run_id,
-        audio_path,
-        duration,
-    )
-    return context, stages, None, None
-
-
 def prepare_resume_run(
     args: argparse.Namespace,
     run_manager: RunManager,
     registry: ModelRegistry,
 ) -> tuple[PipelineContext, list[Stage], PipelineState, list]:
+    """Подготавливает данные для возобновления прерванного запуска.
+
+    Args:
+        args (argparse.Namespace): Разобранные аргументы CLI (использует ``args.resume``).
+        run_manager (RunManager): Менеджер запусков для чтения конфигурации и состояния.
+        registry (ModelRegistry): Реестр моделей для создания стадий.
+
+    Returns:
+        tuple: Кортеж ``(context, stages, state, initial_segments)``.
+
+    Raises:
+        FileNotFoundError: Если директория запуска или аудиофайл не существуют.
+        ValueError: Если конфигурация неполна или список стадий изменился.
+    """
     run_id = args.resume
     run_dir = run_manager.run_dir_for(run_id)
     if not run_dir.exists():
@@ -275,7 +257,7 @@ def prepare_resume_run(
 
     initial_segments: list = []
     if state.last_stage_index > 0:
-        last_name = state.completed_stages[-1]
+        last_name = state.completed_stages[state.last_stage_index - 1]
         initial_segments = run_manager.load_stage_result(
             run_dir, state.last_stage_index, last_name
         )
@@ -296,6 +278,14 @@ def prepare_resume_run(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Точка входа CLI-приложения.
+
+    Args:
+        argv (list[str] | None): Аргументы командной строки или ``None`` для sys.argv.
+
+    Returns:
+        int: Код выхода (0 — успех, 2 — ошибка).
+    """
     args = parse_args(argv)
 
     logging.basicConfig(
@@ -303,31 +293,45 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    run_manager = RunManager(runs_root=args.runs_dir.expanduser().resolve())
-    registry = default_registry()
+    bus = EventBus()
+    attach_logging_subscriber(bus)
 
     try:
         if args.resume:
+            run_manager = RunManager(runs_root=args.runs_dir.expanduser().resolve())
+            registry = default_registry()
+            stage_registry = StageRegistry()
+            setup_plugins(registry, stage_registry)
+            if len(stage_registry) > 0:
+                logger.warning(
+                    "Plugin(s) registered %d stage(s) via StageRegistry %s, "
+                    "but build_stages() does not yet consume StageRegistry — "
+                    "these stages will be ignored until config-driven pipeline is implemented.",
+                    len(stage_registry),
+                    stage_registry.list(),
+                )
             context, stages, state, initial_segments = prepare_resume_run(
                 args, run_manager, registry
             )
+            engine = PipelineEngine(stages=stages, run_manager=run_manager, event_bus=bus)
+            engine.run(context, initial_segments=initial_segments, state=state)
+            logger.info("Artifacts under %s", context.run_dir)
         else:
-            context, stages, state, initial_segments = prepare_fresh_run(
-                args, run_manager, registry
+            result = transcribe(
+                args.audio,
+                runs_dir=args.runs_dir.expanduser().resolve(),
+                window_seconds=args.window,
+                event_bus=bus,
             )
+            report = build_meeting_report(result)
+            export_json(report, result.run_dir / "result.json")
+            export_txt(report, result.run_dir / "result.txt")
+            logger.info("Artifacts under %s", result.run_dir)
+            logger.info("Exported: %s", result.run_dir / "result.json")
     except (FileNotFoundError, ValueError, KeyError) as exc:
         logger.error("%s", exc)
         return 2
 
-    bus = EventBus()
-    attach_logging_subscriber(bus)
-
-    engine = PipelineEngine(
-        stages=stages, run_manager=run_manager, event_bus=bus
-    )
-    engine.run(context, initial_segments=initial_segments, state=state)
-
-    logger.info("Artifacts under %s", context.run_dir)
     return 0
 
 
