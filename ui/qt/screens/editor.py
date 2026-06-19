@@ -110,7 +110,7 @@ class _SegItem(QFrame):
         )
         self._preview.setText(seg.text or "")
         self.setToolTip(
-            f"Спикер: {spk} | Язык: {seg.language or '—'} | {time_str}"
+            f"Участник: {spk} | Язык: {seg.language or '—'} | {time_str}"
         )
 
     def setChecked(self, checked: bool) -> None:
@@ -128,6 +128,54 @@ class _SegItem(QFrame):
     def mousePressEvent(self, event) -> None:
         super().mousePressEvent(event)
         self.clicked.emit()
+
+
+class _SpeakerLegend(QWidget):
+    """Компактная легенда спикеров: 2 элемента в колонке, несколько колонок."""
+
+    _ROWS = 2
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._grid = QHBoxLayout(self)
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        self._grid.setSpacing(16)
+
+    def refresh(self, speakers: list[str]) -> None:
+        while self._grid.count():
+            item = self._grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        if not speakers:
+            return
+
+        for col_start in range(0, len(speakers), self._ROWS):
+            col_w = QWidget()
+            col_v = QVBoxLayout(col_w)
+            col_v.setContentsMargins(0, 0, 0, 0)
+            col_v.setSpacing(2)
+            for row in range(self._ROWS):
+                idx = col_start + row
+                if idx >= len(speakers):
+                    break
+                spk = speakers[idx]
+                color = _SPEAKER_COLORS[idx % len(_SPEAKER_COLORS)]
+                row_w = QWidget()
+                row_h = QHBoxLayout(row_w)
+                row_h.setContentsMargins(0, 0, 0, 0)
+                row_h.setSpacing(4)
+                dot = QLabel("●")
+                dot.setStyleSheet(
+                    f"color: {color}; font-size: 9px; background: transparent;"
+                )
+                name_lbl = QLabel(_truncate(spk, 16))
+                name_lbl.setObjectName("muted")
+                name_lbl.setStyleSheet("font-size: 11px;")
+                row_h.addWidget(dot)
+                row_h.addWidget(name_lbl)
+                col_v.addWidget(row_w)
+            self._grid.addWidget(col_w)
 
 
 class TranscriptEditorScreen(QWidget):
@@ -167,6 +215,12 @@ class TranscriptEditorScreen(QWidget):
         else:
             self._audio_player.clear()
             self._audio_player.setVisible(False)
+
+    def set_theme(self, mode: str) -> None:
+        self._audio_player.set_theme(mode)
+
+    def set_scale(self, scale: float) -> None:
+        self._timeline.set_scale(scale)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -257,17 +311,17 @@ class TranscriptEditorScreen(QWidget):
 
         outer.addWidget(splitter, stretch=1)
 
-        # Audio player transport bar
+        # Создаём оба виджета, затем добавляем в DAW-порядке: дорожки ↑, транспорт ↓
         self._audio_player = AudioPlayerWidget()
-        outer.addWidget(self._audio_player)
 
-        # Timeline
         self._timeline = TimelineWidget()
         self._timeline.segment_clicked.connect(self._select)
         self._timeline.playhead_seek.connect(self._audio_player.seek)
         self._audio_player.position_changed.connect(self._timeline.set_playhead)
         self._audio_player.position_changed.connect(self._on_playback_position)
         outer.addWidget(self._timeline)
+        outer.addWidget(self._audio_player)
+        self._audio_player.zoom_changed.connect(self._timeline.set_zoom)
 
         # Bottom action bar
         bottom = QHBoxLayout()
@@ -353,13 +407,13 @@ class TranscriptEditorScreen(QWidget):
         spk_vbox.setContentsMargins(12, 10, 12, 10)
         spk_vbox.setSpacing(6)
 
-        spk_hdr = QLabel("Спикер")
+        spk_hdr = QLabel("Участник")
         spk_hdr.setObjectName("muted")
         spk_vbox.addWidget(spk_hdr)
 
         spk_row = QHBoxLayout()
         self._speaker_edit = QLineEdit()
-        self._speaker_edit.setPlaceholderText("Имя спикера")
+        self._speaker_edit.setPlaceholderText("Имя участника")
         self._speaker_edit.textChanged.connect(self._on_speaker_edit_changed)
         spk_row.addWidget(self._speaker_edit, stretch=1)
 
