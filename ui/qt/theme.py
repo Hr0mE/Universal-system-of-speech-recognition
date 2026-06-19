@@ -10,9 +10,9 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
 # ── Dark theme tokens ────────────────────────────────────────────────
-BG_BASE = "#09090B"
-BG_SURFACE = "#131318"
-BG_INPUT = "#1C1C22"
+BG_BASE = "#18181B"
+BG_SURFACE = "#1F1F23"
+BG_INPUT = "#27272A"
 ACCENT = "#6366F1"
 ACCENT_HOVER = "#4F46E5"
 ACCENT_PRESSED = "#4338CA"
@@ -21,15 +21,15 @@ ACCENT_TINT = "rgba(99, 102, 241, 0.10)"
 ACCENT_TINT_STRONG = "rgba(99, 102, 241, 0.18)"
 ACCENT_TINT_DROP = "rgba(99, 102, 241, 0.55)"
 TEXT_PRIMARY = "#E1E1E6"
-TEXT_MUTED = "#71717A"
+TEXT_MUTED = "#A1A1AA"
 SUCCESS = "#34D399"
 WARNING = "#FBBF24"
 WARNING_TINT = "rgba(251, 191, 36, 0.08)"
 WARNING_TINT_HOVER = "rgba(251, 191, 36, 0.14)"
 ERROR = "#F87171"
 STOPPED = "#F97316"
-BORDER = "#232329"
-BORDER_LIGHT = "#3F3F46"
+BORDER = "#303036"
+BORDER_LIGHT = "#48484F"
 
 # ── Light theme tokens ────────────────────────────────────────────
 LIGHT_BG                 = "#FFFFFF"
@@ -97,20 +97,23 @@ QPushButton:disabled {{
 }}
 
 QPushButton#run_btn {{
-    background-color: {ACCENT};
-    color: #ffffff;
-    border: none;
-    font-weight: bold;
+    background-color: {BG_INPUT};
+    color: {ACCENT_TEXT};
+    border: 1px solid {ACCENT};
+    border-radius: 4px;
+    font-weight: 600;
 }}
 QPushButton#run_btn:hover {{
-    background-color: {ACCENT_HOVER};
+    background-color: {ACCENT_TINT};
+    border-color: {ACCENT_HOVER};
 }}
 QPushButton#run_btn:pressed {{
-    background-color: {ACCENT_PRESSED};
+    background-color: {ACCENT_TINT_STRONG};
 }}
 QPushButton#run_btn:disabled {{
-    background-color: {BORDER};
+    background-color: transparent;
     color: {TEXT_MUTED};
+    border-color: {BORDER};
 }}
 
 QPushButton#stop_btn {{
@@ -315,6 +318,12 @@ QWidget#editor_header {{
     min-height: 52px;
 }}
 
+QWidget#editor_footer {{
+    background-color: {BG_SURFACE};
+    border-top: 1px solid {BORDER};
+    min-height: 38px;
+}}
+
 /* ── Navigation sidebar ── */
 
 QWidget#nav_bar {{
@@ -334,21 +343,47 @@ QLabel#nav_title {{
     min-height: 52px;
 }}
 
-QPushButton#nav_new_btn {{
-    background-color: {ACCENT};
-    color: #ffffff;
+QWidget#nav_main_item_row {{
+    background-color: {BG_SURFACE};
+}}
+
+QPushButton#nav_add_btn {{
+    background: transparent;
     border: none;
     border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    margin: 8px 12px 4px 12px;
-    min-height: 32px;
+    padding: 0;
 }}
-QPushButton#nav_new_btn:hover {{
-    background-color: {ACCENT_HOVER};
+QPushButton#nav_add_btn:hover {{
+    background-color: {BG_INPUT};
 }}
-QPushButton#nav_new_btn:pressed {{
-    background-color: {ACCENT_PRESSED};
+QPushButton#nav_add_btn:pressed {{
+    background-color: {ACCENT_TINT_STRONG};
+}}
+
+QPushButton#nav_main_item {{
+    background-color: transparent;
+    color: {TEXT_PRIMARY};
+    border: none;
+    border-left: 2px solid transparent;
+    border-radius: 6px;
+    text-align: left;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 400;
+    min-height: 36px;
+}}
+QPushButton#nav_main_item:hover {{
+    background-color: {BG_INPUT};
+}}
+QPushButton#nav_main_item:checked {{
+    background-color: {ACCENT_TINT_STRONG};
+    border-left: 2px solid {ACCENT};
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    color: {ACCENT_TEXT};
+    font-weight: 500;
 }}
 
 QLabel#nav_section {{
@@ -368,23 +403,39 @@ QScrollArea#nav_scroll {{
     border: none;
 }}
 
-QPushButton#nav_item {{
+QFrame#nav_item {{
     background-color: transparent;
-    color: {TEXT_PRIMARY};
     border: none;
+    border-left: 2px solid transparent;
     border-radius: 6px;
-    text-align: left;
-    padding: 6px 10px;
-    font-size: 12px;
-    min-height: 44px;
 }}
-QPushButton#nav_item:hover {{
+QFrame#nav_item:hover {{
     background-color: {BG_INPUT};
 }}
-QPushButton#nav_item:checked {{
-    background-color: {ACCENT_TINT_STRONG};
-    color: {ACCENT_TEXT};
+QFrame#nav_item[checked="true"] {{
+    background-color: {ACCENT_TINT};
+    border-left: 2px solid {ACCENT};
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
 }}
+QLabel#nav_item_name {{
+    font-size: 13px;
+    font-weight: 400;
+    color: {TEXT_PRIMARY};
+    background: transparent;
+}}
+QLabel#nav_item_age {{
+    font-size: 11px;
+    color: {TEXT_MUTED};
+    background: transparent;
+}}
+QLabel#nav_status_dot[status="completed"]  {{ background: {SUCCESS};     border-radius: 4px; }}
+QLabel#nav_status_dot[status="processing"] {{ background: {ACCENT_TEXT}; border-radius: 4px; }}
+QLabel#nav_status_dot[status="stopped"]    {{ background: {TEXT_MUTED};  border-radius: 4px; }}
+QLabel#nav_status_dot[status="failed"]     {{ background: {ERROR};       border-radius: 4px; }}
+QLabel#nav_status_dot[status="empty"]      {{ background: {BORDER_LIGHT}; border-radius: 4px; }}
 
 /* ── Nav divider ── */
 
@@ -839,19 +890,82 @@ QFrame#editor_spk_frame {{
     border-radius: 6px;
 }}
 
-/* ── Audio player transport buttons ── */
+/* ── Audio player transport bar ── */
 
 QWidget#audio_player {{
-    background-color: {BG_SURFACE};
+    background-color: {BG_BASE};
     border-top: 1px solid {BORDER};
+    min-height: 44px;
 }}
 QPushButton#player_btn {{
-    padding: 4px 10px;
-    min-width: 28px;
+    padding: 2px 6px;
+    min-width: 24px;
+    max-height: 28px;
 }}
 QLabel#player_time {{
     color: {TEXT_MUTED};
     background: transparent;
+}}
+QSlider#player_seek::groove:horizontal {{
+    background: {BORDER};
+    height: 4px;
+    border-radius: 2px;
+}}
+QSlider#player_seek::sub-page:horizontal {{
+    background: {ACCENT};
+    height: 4px;
+    border-radius: 2px;
+}}
+QSlider#player_seek::handle:horizontal {{
+    background: {ACCENT};
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 6px;
+}}
+QPushButton#player_speed_btn {{
+    background-color: transparent;
+    color: {TEXT_MUTED};
+    border: 1px solid {BORDER};
+    border-radius: 3px;
+    padding: 0px 6px;
+    font-size: 11px;
+    min-width: 36px;
+    max-height: 22px;
+}}
+QPushButton#player_speed_btn:hover {{
+    border-color: {ACCENT};
+    color: {ACCENT_TEXT};
+}}
+QPushButton#player_speed_btn[active="true"] {{
+    border-color: {ACCENT};
+    color: {ACCENT_TEXT};
+    background-color: {ACCENT_TINT};
+}}
+QLabel#player_zoom_lbl {{
+    color: {TEXT_MUTED};
+    font-size: 11px;
+    background: transparent;
+}}
+QSlider#player_zoom::groove:horizontal {{
+    background: {BORDER};
+    height: 3px;
+    border-radius: 1px;
+}}
+QSlider#player_zoom::sub-page:horizontal {{
+    background: {ACCENT};
+    height: 3px;
+    border-radius: 1px;
+}}
+QSlider#player_zoom::handle:horizontal {{
+    background: {BORDER_LIGHT};
+    width: 10px;
+    height: 10px;
+    margin: -3px 0;
+    border-radius: 5px;
+}}
+QSlider#player_zoom::handle:horizontal:hover {{
+    background: {ACCENT};
 }}
 
 /* ── Preset strip (inline chip row below pipeline editor header) ── */
@@ -1040,9 +1154,10 @@ QPushButton#card_download_btn {{
     background-color: transparent;
     color: {ACCENT_TEXT};
     border: 1px solid {ACCENT};
-    border-radius: 3px;
+    border-radius: 9999px;
     font-size: 11px;
-    padding: 0 8px;
+    padding: 2px 10px;
+    min-height: 22px;
 }}
 QPushButton#card_download_btn:hover {{
     background-color: {ACCENT_TINT};
@@ -1179,9 +1294,10 @@ QPushButton#chip_cancel_btn {{
     background-color: transparent;
     color: {TEXT_MUTED};
     border: 1px solid {BORDER_LIGHT};
-    border-radius: 4px;
+    border-radius: 9999px;
     font-size: 11px;
-    padding: 0 8px;
+    padding: 2px 10px;
+    min-height: 22px;
 }}
 QPushButton#chip_cancel_btn:hover {{
     color: {ERROR};
@@ -1261,12 +1377,17 @@ QPushButton#custom_del_btn {{
     background-color: transparent;
     color: {TEXT_MUTED};
     border: none;
-    font-size: 13px;
-    font-weight: 600;
+    border-radius: 9999px;
+    font-size: 11px;
     padding: 0;
+    min-width: 16px;
+    max-width: 16px;
+    min-height: 16px;
+    max-height: 16px;
 }}
 QPushButton#custom_del_btn:hover {{
     color: {ERROR};
+    background-color: rgba(248, 113, 113, 0.12);
 }}
 
 /* ── Processing screen progress bars ── */
@@ -1295,16 +1416,48 @@ QProgressBar#stage_bar[status="error"]::chunk {{
 QProgressBar#seg_bar {{
     background-color: {BG_INPUT};
     border: 1px solid {BORDER};
-    border-radius: 2px;
+    border-radius: 4px;
     text-align: center;
-    color: {TEXT_MUTED};
-    min-height: 4px;
-    max-height: 4px;
-    font-size: 10px;
+    color: {TEXT_PRIMARY};
+    min-height: 20px;
+    max-height: 20px;
+    font-size: 12px;
 }}
 QProgressBar#seg_bar::chunk {{
-    background-color: {BORDER_LIGHT};
-    border-radius: 1px;
+    background-color: {ACCENT};
+    border-radius: 3px;
+}}
+
+/* ── Stage timeline pills ── */
+QLabel#stage_pill {{
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: {TEXT_MUTED};
+    background: transparent;
+}}
+QLabel#stage_pill[stage_state="active"] {{
+    color: {TEXT_PRIMARY};
+    font-weight: bold;
+}}
+QLabel#stage_pill[stage_state="done"] {{
+    color: {SUCCESS};
+}}
+QLabel#stage_pill[stage_state="error"] {{
+    color: {ERROR};
+}}
+QLabel#stage_sep {{
+    color: {TEXT_MUTED};
+    font-size: 10px;
+    background: transparent;
+}}
+
+/* ── Model download label ── */
+QLabel#proc_download_label {{
+    font-size: 12px;
+    color: {WARNING};
+    background: transparent;
+    padding: 2px 0;
 }}
 
 /* ── Tooltip ── */
@@ -1363,20 +1516,23 @@ QPushButton:disabled {{
 }}
 
 QPushButton#run_btn {{
-    background-color: {LIGHT_ACCENT};
-    color: #ffffff;
-    border: none;
-    font-weight: bold;
+    background-color: {LIGHT_SURFACE_ELEVATED};
+    color: {LIGHT_ACCENT_TEXT};
+    border: 1px solid {LIGHT_ACCENT};
+    border-radius: 4px;
+    font-weight: 600;
 }}
 QPushButton#run_btn:hover {{
-    background-color: {LIGHT_ACCENT_HOVER};
+    background-color: {LIGHT_ACCENT_TINT};
+    border-color: {LIGHT_ACCENT_HOVER};
 }}
 QPushButton#run_btn:pressed {{
-    background-color: {LIGHT_ACCENT_PRESSED};
+    background-color: {LIGHT_ACCENT_TINT_STRONG};
 }}
 QPushButton#run_btn:disabled {{
-    background-color: {LIGHT_BORDER};
+    background-color: transparent;
     color: {LIGHT_TEXT_DISABLED};
+    border-color: {LIGHT_BORDER};
 }}
 
 QPushButton#stop_btn {{
@@ -1581,6 +1737,12 @@ QWidget#editor_header {{
     min-height: 52px;
 }}
 
+QWidget#editor_footer {{
+    background-color: {LIGHT_SURFACE};
+    border-top: 1px solid {LIGHT_BORDER};
+    min-height: 38px;
+}}
+
 /* ── Navigation sidebar ── */
 
 QWidget#nav_bar {{
@@ -1600,21 +1762,47 @@ QLabel#nav_title {{
     min-height: 52px;
 }}
 
-QPushButton#nav_new_btn {{
-    background-color: {LIGHT_ACCENT};
-    color: #ffffff;
+QWidget#nav_main_item_row {{
+    background-color: {LIGHT_SURFACE};
+}}
+
+QPushButton#nav_add_btn {{
+    background: transparent;
     border: none;
     border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    margin: 8px 12px 4px 12px;
-    min-height: 32px;
+    padding: 0;
 }}
-QPushButton#nav_new_btn:hover {{
-    background-color: {LIGHT_ACCENT_HOVER};
+QPushButton#nav_add_btn:hover {{
+    background-color: {LIGHT_SURFACE_ELEVATED};
 }}
-QPushButton#nav_new_btn:pressed {{
-    background-color: {LIGHT_ACCENT_PRESSED};
+QPushButton#nav_add_btn:pressed {{
+    background-color: {LIGHT_ACCENT_TINT_STRONG};
+}}
+
+QPushButton#nav_main_item {{
+    background-color: transparent;
+    color: {LIGHT_TEXT_PRIMARY};
+    border: none;
+    border-left: 2px solid transparent;
+    border-radius: 6px;
+    text-align: left;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 400;
+    min-height: 36px;
+}}
+QPushButton#nav_main_item:hover {{
+    background-color: {LIGHT_SURFACE_ELEVATED};
+}}
+QPushButton#nav_main_item:checked {{
+    background-color: {LIGHT_ACCENT_TINT_STRONG};
+    border-left: 2px solid {LIGHT_ACCENT};
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    color: {LIGHT_ACCENT_TEXT};
+    font-weight: 500;
 }}
 
 QLabel#nav_section {{
@@ -1634,23 +1822,39 @@ QScrollArea#nav_scroll {{
     border: none;
 }}
 
-QPushButton#nav_item {{
+QFrame#nav_item {{
     background-color: transparent;
-    color: {LIGHT_TEXT_PRIMARY};
     border: none;
+    border-left: 2px solid transparent;
     border-radius: 6px;
-    text-align: left;
-    padding: 6px 10px;
-    font-size: 12px;
-    min-height: 44px;
 }}
-QPushButton#nav_item:hover {{
+QFrame#nav_item:hover {{
     background-color: {LIGHT_SURFACE_ELEVATED};
 }}
-QPushButton#nav_item:checked {{
-    background-color: {LIGHT_ACCENT_TINT_STRONG};
-    color: {LIGHT_ACCENT_TEXT};
+QFrame#nav_item[checked="true"] {{
+    background-color: {LIGHT_ACCENT_TINT};
+    border-left: 2px solid {LIGHT_ACCENT};
+    border-top-left-radius: 0px;
+    border-bottom-left-radius: 0px;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
 }}
+QLabel#nav_item_name {{
+    font-size: 13px;
+    font-weight: 400;
+    color: {LIGHT_TEXT_PRIMARY};
+    background: transparent;
+}}
+QLabel#nav_item_age {{
+    font-size: 11px;
+    color: {LIGHT_TEXT_SECONDARY};
+    background: transparent;
+}}
+QLabel#nav_status_dot[status="completed"]  {{ background: {LIGHT_SUCCESS};       border-radius: 4px; }}
+QLabel#nav_status_dot[status="processing"] {{ background: {LIGHT_ACCENT_TEXT};   border-radius: 4px; }}
+QLabel#nav_status_dot[status="stopped"]    {{ background: {LIGHT_TEXT_SECONDARY}; border-radius: 4px; }}
+QLabel#nav_status_dot[status="failed"]     {{ background: {LIGHT_ERROR};         border-radius: 4px; }}
+QLabel#nav_status_dot[status="empty"]      {{ background: {LIGHT_BORDER_HOVER};  border-radius: 4px; }}
 
 /* ── Nav divider ── */
 
@@ -2104,19 +2308,82 @@ QFrame#editor_spk_frame {{
     border-radius: 6px;
 }}
 
-/* ── Audio player transport buttons ── */
+/* ── Audio player transport bar ── */
 
 QWidget#audio_player {{
-    background-color: {LIGHT_SURFACE};
+    background-color: {LIGHT_BG};
     border-top: 1px solid {LIGHT_BORDER};
+    min-height: 44px;
 }}
 QPushButton#player_btn {{
-    padding: 4px 10px;
-    min-width: 28px;
+    padding: 2px 6px;
+    min-width: 24px;
+    max-height: 28px;
 }}
 QLabel#player_time {{
     color: {LIGHT_TEXT_SECONDARY};
     background: transparent;
+}}
+QSlider#player_seek::groove:horizontal {{
+    background: {LIGHT_BORDER};
+    height: 4px;
+    border-radius: 2px;
+}}
+QSlider#player_seek::sub-page:horizontal {{
+    background: {LIGHT_ACCENT};
+    height: 4px;
+    border-radius: 2px;
+}}
+QSlider#player_seek::handle:horizontal {{
+    background: {LIGHT_ACCENT};
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 6px;
+}}
+QPushButton#player_speed_btn {{
+    background-color: transparent;
+    color: {LIGHT_TEXT_SECONDARY};
+    border: 1px solid {LIGHT_BORDER};
+    border-radius: 3px;
+    padding: 0px 6px;
+    font-size: 11px;
+    min-width: 36px;
+    max-height: 22px;
+}}
+QPushButton#player_speed_btn:hover {{
+    border-color: {LIGHT_ACCENT};
+    color: {LIGHT_ACCENT_TEXT};
+}}
+QPushButton#player_speed_btn[active="true"] {{
+    border-color: {LIGHT_ACCENT};
+    color: {LIGHT_ACCENT_TEXT};
+    background-color: {LIGHT_ACCENT_TINT};
+}}
+QLabel#player_zoom_lbl {{
+    color: {LIGHT_TEXT_SECONDARY};
+    font-size: 11px;
+    background: transparent;
+}}
+QSlider#player_zoom::groove:horizontal {{
+    background: {LIGHT_BORDER};
+    height: 3px;
+    border-radius: 1px;
+}}
+QSlider#player_zoom::sub-page:horizontal {{
+    background: {LIGHT_ACCENT};
+    height: 3px;
+    border-radius: 1px;
+}}
+QSlider#player_zoom::handle:horizontal {{
+    background: {LIGHT_BORDER_HOVER};
+    width: 10px;
+    height: 10px;
+    margin: -3px 0;
+    border-radius: 5px;
+}}
+QSlider#player_zoom::handle:horizontal:hover {{
+    background: {LIGHT_ACCENT};
 }}
 
 /* ── Preset strip (inline chip row below pipeline editor header) ── */
@@ -2304,9 +2571,10 @@ QPushButton#card_download_btn {{
     background-color: transparent;
     color: {LIGHT_ACCENT_TEXT};
     border: 1px solid {LIGHT_ACCENT};
-    border-radius: 3px;
+    border-radius: 9999px;
     font-size: 11px;
-    padding: 0 8px;
+    padding: 2px 10px;
+    min-height: 22px;
 }}
 QPushButton#card_download_btn:hover {{
     background-color: {LIGHT_ACCENT_TINT};
@@ -2443,9 +2711,10 @@ QPushButton#chip_cancel_btn {{
     background-color: transparent;
     color: {LIGHT_TEXT_SECONDARY};
     border: 1px solid {LIGHT_BORDER_HOVER};
-    border-radius: 4px;
+    border-radius: 9999px;
     font-size: 11px;
-    padding: 0 8px;
+    padding: 2px 10px;
+    min-height: 22px;
 }}
 QPushButton#chip_cancel_btn:hover {{
     color: {LIGHT_ERROR};
@@ -2525,12 +2794,17 @@ QPushButton#custom_del_btn {{
     background-color: transparent;
     color: {LIGHT_TEXT_SECONDARY};
     border: none;
-    font-size: 13px;
-    font-weight: 600;
+    border-radius: 9999px;
+    font-size: 11px;
     padding: 0;
+    min-width: 16px;
+    max-width: 16px;
+    min-height: 16px;
+    max-height: 16px;
 }}
 QPushButton#custom_del_btn:hover {{
     color: {LIGHT_ERROR};
+    background-color: rgba(220, 38, 38, 0.10);
 }}
 
 /* ── Processing screen progress bars ── */
@@ -2559,16 +2833,48 @@ QProgressBar#stage_bar[status="error"]::chunk {{
 QProgressBar#seg_bar {{
     background-color: {LIGHT_SURFACE_ELEVATED};
     border: 1px solid {LIGHT_BORDER};
-    border-radius: 2px;
+    border-radius: 4px;
     text-align: center;
-    color: {LIGHT_TEXT_SECONDARY};
-    min-height: 4px;
-    max-height: 4px;
-    font-size: 10px;
+    color: {LIGHT_TEXT_PRIMARY};
+    min-height: 20px;
+    max-height: 20px;
+    font-size: 12px;
 }}
 QProgressBar#seg_bar::chunk {{
-    background-color: {LIGHT_BORDER_HOVER};
-    border-radius: 1px;
+    background-color: {LIGHT_ACCENT};
+    border-radius: 3px;
+}}
+
+/* ── Stage timeline pills ── */
+QLabel#stage_pill {{
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: {LIGHT_TEXT_SECONDARY};
+    background: transparent;
+}}
+QLabel#stage_pill[stage_state="active"] {{
+    color: {LIGHT_TEXT_PRIMARY};
+    font-weight: bold;
+}}
+QLabel#stage_pill[stage_state="done"] {{
+    color: {LIGHT_SUCCESS};
+}}
+QLabel#stage_pill[stage_state="error"] {{
+    color: {LIGHT_ERROR};
+}}
+QLabel#stage_sep {{
+    color: {LIGHT_TEXT_SECONDARY};
+    font-size: 10px;
+    background: transparent;
+}}
+
+/* ── Model download label ── */
+QLabel#proc_download_label {{
+    font-size: 12px;
+    color: {LIGHT_WARNING};
+    background: transparent;
+    padding: 2px 0;
 }}
 
 /* ── Tooltip ── */
