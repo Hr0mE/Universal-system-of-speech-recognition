@@ -242,21 +242,31 @@ class TranscriptEditorScreen(QWidget):
         back_btn.clicked.connect(self._on_back)
         header_layout.addWidget(back_btn)
 
-        self._meta_label = QLabel("")
-        self._meta_label.setObjectName("muted")
-        header_layout.addWidget(self._meta_label)
-
         header_layout.addStretch()
 
-        self._dirty_badge = QLabel("● несохранённые")
-        self._dirty_badge.setObjectName("dirty_badge")
-        self._dirty_badge.setVisible(False)
-        header_layout.addWidget(self._dirty_badge)
+        self._revert_btn = QPushButton("Отменить изменения")
+        self._revert_btn.setObjectName("stop_btn")
+        self._revert_btn.setEnabled(False)
+        self._revert_btn.clicked.connect(self._revert)
+        header_layout.addWidget(self._revert_btn)
 
         save_btn = QPushButton("Сохранить")
         save_btn.setObjectName("run_btn")
         save_btn.clicked.connect(self._save)
-        header_layout.addWidget(save_btn)
+
+        self._dirty_badge = QLabel("● несохранённые")
+        self._dirty_badge.setObjectName("dirty_badge")
+        self._dirty_badge.setVisible(False)
+        self._dirty_badge.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        save_wrap = QWidget()
+        save_wrap.setStyleSheet("background: transparent;")
+        save_vbox = QVBoxLayout(save_wrap)
+        save_vbox.setContentsMargins(0, 0, 0, 0)
+        save_vbox.setSpacing(1)
+        save_vbox.addWidget(save_btn)
+        save_vbox.addWidget(self._dirty_badge)
+        header_layout.addWidget(save_wrap)
 
         outer.addWidget(header_bar)
 
@@ -323,14 +333,16 @@ class TranscriptEditorScreen(QWidget):
         outer.addWidget(self._audio_player)
         self._audio_player.zoom_changed.connect(self._timeline.set_zoom)
 
-        # Bottom action bar
-        bottom = QHBoxLayout()
-        bottom.setContentsMargins(24, 8, 24, 16)
-        bottom.setSpacing(8)
+        # Footer: action buttons + reference info
+        footer_widget = QWidget()
+        footer_widget.setObjectName("editor_footer")
+        footer_layout = QHBoxLayout(footer_widget)
+        footer_layout.setContentsMargins(16, 0, 16, 0)
+        footer_layout.setSpacing(8)
 
         self._copy_btn = QPushButton("Копировать всё")
         self._copy_btn.clicked.connect(self._on_copy_all)
-        bottom.addWidget(self._copy_btn)
+        footer_layout.addWidget(self._copy_btn)
 
         export_menu = QMenu()
         export_menu.addAction("Сохранить JSON", self._on_save_json)
@@ -339,17 +351,23 @@ class TranscriptEditorScreen(QWidget):
         self._export_btn.setText("Экспорт")
         self._export_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self._export_btn.setMenu(export_menu)
-        bottom.addWidget(self._export_btn)
+        footer_layout.addWidget(self._export_btn)
 
-        bottom.addStretch()
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setObjectName("muted")
+        footer_layout.addWidget(sep)
 
-        self._revert_btn = QPushButton("Отменить изменения")
-        self._revert_btn.setObjectName("stop_btn")
-        self._revert_btn.setEnabled(False)
-        self._revert_btn.clicked.connect(self._revert)
-        bottom.addWidget(self._revert_btn)
+        self._footer_stats = QLabel("")
+        self._footer_stats.setObjectName("muted")
+        footer_layout.addWidget(self._footer_stats)
 
-        outer.addLayout(bottom)
+        footer_layout.addStretch()
+
+        self._speaker_legend = _SpeakerLegend()
+        footer_layout.addWidget(self._speaker_legend)
+
+        outer.addWidget(footer_widget)
 
     def _build_placeholder(self) -> QWidget:
         w = QWidget()
@@ -464,15 +482,7 @@ class TranscriptEditorScreen(QWidget):
                 item.setChecked(True)
             self._list_layout.insertWidget(i, item)
 
-        seg_count = len(self._segments)
-        # Update section header label
-        nav_lbl = self._list_widget.parent().parent().findChild(QLabel, "")
-        # Update the count in the header via meta label
-        self._meta_label.setText(
-            f"run: {self._result.run_id if self._result else '—'}  ·  "
-            f"{_fmt_time(self._result.duration_s if self._result else 0)}  ·  "
-            f"{seg_count} сегм."
-        )
+        self._update_footer()
         # Refresh timeline (speaker colors may have changed)
         if self._result is not None:
             self._timeline.load(self._segments, self._result.duration_s)
@@ -611,12 +621,15 @@ class TranscriptEditorScreen(QWidget):
     def _update_header(self) -> None:
         self._dirty_badge.setVisible(self._dirty)
         self._revert_btn.setEnabled(self._dirty)
+
+    def _update_footer(self) -> None:
         if self._result:
-            self._meta_label.setText(
+            self._footer_stats.setText(
                 f"run: {self._result.run_id}  ·  "
-                f"{_fmt_time(self._result.duration_s)}  ·  "
-                f"{len(self._segments)} сегм."
+                f"{len(self._segments)} сегм.  ·  "
+                f"{_fmt_time(self._result.duration_s)}"
             )
+        self._speaker_legend.refresh(self._all_speakers())
 
     # ------------------------------------------------------------------
     # Save / revert
