@@ -355,7 +355,7 @@ class TranscriptEditorScreen(QWidget):
 
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setObjectName("muted")
+        sep.setStyleSheet(f"color: {TEXT_MUTED};")
         footer_layout.addWidget(sep)
 
         self._footer_stats = QLabel("")
