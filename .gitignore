@@ -89,6 +89,9 @@ desktop.ini
 .pytype/
 .pyre/
 
+# TDD workflow artifacts
+.tdd-gate-passed
+
 # Testing / coverage
 .pytest_cache/
 .coverage
