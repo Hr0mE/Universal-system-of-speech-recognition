@@ -140,7 +140,7 @@ class ResultScreen(QWidget):
         # Content area with proper margins (footer sits flush outside these)
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(32, 32, 32, 32)
+        content_layout.setContentsMargins(32, 32, 32, 8)
         content_layout.setSpacing(16)
 
         # Header: ← Назад · "Результат" · stretch · Редактировать
