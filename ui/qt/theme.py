@@ -320,7 +320,6 @@ QWidget#editor_header {{
 
 QWidget#editor_footer {{
     background-color: {BG_BASE};
-    border-top: 1px solid {BORDER};
     min-height: 40px;
 }}
 
@@ -1739,7 +1738,6 @@ QWidget#editor_header {{
 
 QWidget#editor_footer {{
     background-color: {LIGHT_BG};
-    border-top: 1px solid {LIGHT_BORDER};
     min-height: 40px;
 }}
 
