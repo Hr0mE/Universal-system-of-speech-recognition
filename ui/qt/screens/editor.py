@@ -281,7 +281,7 @@ class TranscriptEditorScreen(QWidget):
         footer_widget = QWidget()
         footer_widget.setObjectName("editor_footer")
         footer_layout = QHBoxLayout(footer_widget)
-        footer_layout.setContentsMargins(16, 0, 16, 0)
+        footer_layout.setContentsMargins(14, 6, 14, 6)
         footer_layout.setSpacing(0)
 
         footer_layout.addStretch()

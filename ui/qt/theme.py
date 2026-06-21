@@ -321,7 +321,6 @@ QWidget#editor_header {{
 QWidget#editor_footer {{
     background-color: {BG_SURFACE};
     border-top: 1px solid {BORDER};
-    min-height: 38px;
 }}
 
 /* ── Navigation sidebar ── */
@@ -1740,7 +1739,6 @@ QWidget#editor_header {{
 QWidget#editor_footer {{
     background-color: {LIGHT_SURFACE};
     border-top: 1px solid {LIGHT_BORDER};
-    min-height: 38px;
 }}
 
 /* ── Navigation sidebar ── */
