@@ -112,7 +112,11 @@ class ResultScreen(QWidget):
         self._last_result = result
         self._browser.document().setDefaultFont(self._browser.font())
         self._browser.setHtml(_render_report_html(result))
-        self._meta_label.setText(f"run: {result.run_id}  ·  {_fmt_time(result.duration_s)}")
+        self._meta_label.setText(
+            f"run: {result.run_id}  ·  "
+            f"{_fmt_time(result.duration_s)}  ·  "
+            f"{len(result.segments)} сегм."
+        )
         for btn in (self._copy_btn, self._json_btn, self._txt_btn, self._edit_btn):
             btn.setEnabled(True)
 
@@ -130,17 +134,20 @@ class ResultScreen(QWidget):
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
-        outer.setSpacing(12)
+        outer.setContentsMargins(32, 32, 32, 32)
+        outer.setSpacing(16)
 
+        # Header: ← Назад · "Результат" · stretch · Редактировать
+        # Mirrors models screen: QLabel title in same row as action button
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+        back_btn = QPushButton("← Назад")
+        back_btn.clicked.connect(self.back_requested)
+        header_row.addWidget(back_btn)
         title = QLabel("Результат")
         title.setObjectName("screen_title")
-        outer.addWidget(title)
-
-        header_row = QHBoxLayout()
-        self._meta_label = QLabel("")
-        self._meta_label.setObjectName("muted")
-        header_row.addWidget(self._meta_label, stretch=1)
+        header_row.addWidget(title)
+        header_row.addStretch()
         self._edit_btn = QPushButton("Редактировать")
         self._edit_btn.setObjectName("run_btn")
         self._edit_btn.setEnabled(False)
@@ -152,6 +159,7 @@ class ResultScreen(QWidget):
         self._browser.setOpenLinks(False)
         outer.addWidget(self._browser, stretch=1)
 
+        # Bottom: export actions left, meta info right
         bottom_row = QHBoxLayout()
         self._copy_btn = QPushButton("Копировать всё")
         self._copy_btn.setEnabled(False)
@@ -162,13 +170,13 @@ class ResultScreen(QWidget):
         self._txt_btn = QPushButton("Сохранить TXT")
         self._txt_btn.setEnabled(False)
         self._txt_btn.clicked.connect(self._on_save_txt)
-        back_btn = QPushButton("← Назад")
-        back_btn.clicked.connect(self.back_requested)
         bottom_row.addWidget(self._copy_btn)
         bottom_row.addWidget(self._json_btn)
         bottom_row.addWidget(self._txt_btn)
         bottom_row.addStretch()
-        bottom_row.addWidget(back_btn)
+        self._meta_label = QLabel("")
+        self._meta_label.setObjectName("muted")
+        bottom_row.addWidget(self._meta_label)
         outer.addLayout(bottom_row)
 
     # ------------------------------------------------------------------
