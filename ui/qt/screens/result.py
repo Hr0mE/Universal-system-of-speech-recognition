@@ -114,8 +114,8 @@ class ResultScreen(QWidget):
         self._browser.setHtml(_render_report_html(result))
         self._meta_label.setText(
             f"run: {result.run_id}  ·  "
-            f"{_fmt_time(result.duration_s)}  ·  "
-            f"{len(result.segments)} сегм."
+            f"{len(result.segments)} сегм.  ·  "
+            f"{_fmt_time(result.duration_s)}"
         )
         for btn in (self._copy_btn, self._json_btn, self._txt_btn, self._edit_btn):
             btn.setEnabled(True)
@@ -134,11 +134,16 @@ class ResultScreen(QWidget):
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(32, 32, 32, 32)
-        outer.setSpacing(16)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Content area with proper margins (footer sits flush outside these)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(32, 32, 32, 32)
+        content_layout.setSpacing(16)
 
         # Header: ← Назад · "Результат" · stretch · Редактировать
-        # Mirrors models screen: QLabel title in same row as action button
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
         back_btn = QPushButton("← Назад")
@@ -153,13 +158,13 @@ class ResultScreen(QWidget):
         self._edit_btn.setEnabled(False)
         self._edit_btn.clicked.connect(self.edit_requested)
         header_row.addWidget(self._edit_btn)
-        outer.addLayout(header_row)
+        content_layout.addLayout(header_row)
 
         self._browser = _ScaledTextBrowser()
         self._browser.setOpenLinks(False)
-        outer.addWidget(self._browser, stretch=1)
+        content_layout.addWidget(self._browser, stretch=1)
 
-        # Bottom: export actions left, meta info right
+        # Export actions (no meta here — it lives in the footer below)
         bottom_row = QHBoxLayout()
         self._copy_btn = QPushButton("Копировать всё")
         self._copy_btn.setEnabled(False)
@@ -173,11 +178,21 @@ class ResultScreen(QWidget):
         bottom_row.addWidget(self._copy_btn)
         bottom_row.addWidget(self._json_btn)
         bottom_row.addWidget(self._txt_btn)
-        bottom_row.addStretch()
+        content_layout.addLayout(bottom_row)
+
+        outer.addWidget(content, stretch=1)
+
+        # Footer: flush at bottom, same widget as editor screen footer
+        footer = QWidget()
+        footer.setObjectName("editor_footer")
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(14, 6, 14, 6)
+        footer_layout.setSpacing(0)
+        footer_layout.addStretch()
         self._meta_label = QLabel("")
         self._meta_label.setObjectName("muted")
-        bottom_row.addWidget(self._meta_label)
-        outer.addLayout(bottom_row)
+        footer_layout.addWidget(self._meta_label)
+        outer.addWidget(footer)
 
     # ------------------------------------------------------------------
     # Event handling
