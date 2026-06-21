@@ -96,9 +96,38 @@ def search_models(
 
 
 def is_cached(repo_id: str) -> bool:
-    """Check whether a model is already in the local HuggingFace cache."""
+    """Check whether a model is **fully** downloaded in the local HuggingFace cache.
+
+    snapshot_download() creates the cache directory immediately on start, so
+    checking directory existence alone returns True for partial downloads.
+    HuggingFace Hub only writes refs/main after all files are successfully
+    downloaded, making it a reliable indicator of a complete snapshot.
+    """
     cache_name = "models--" + repo_id.replace("/", "--")
-    return (_HF_CACHE_ROOT / cache_name).exists()
+    refs_main = _HF_CACHE_ROOT / cache_name / "refs" / "main"
+    return refs_main.is_file() and refs_main.stat().st_size > 0
+
+
+def list_cached_hf_repos() -> list[str]:
+    """Return all fully-downloaded repo_ids from the local HuggingFace cache.
+
+    HuggingFace Hub writes ``refs/main`` only after a complete snapshot download,
+    so its presence is a reliable indicator of a finished download.
+    """
+    if not _HF_CACHE_ROOT.exists():
+        return []
+    result = []
+    for entry in _HF_CACHE_ROOT.iterdir():
+        if not entry.name.startswith("models--"):
+            continue
+        refs_main = entry / "refs" / "main"
+        if refs_main.is_file() and refs_main.stat().st_size > 0:
+            # "models--openai--whisper-tiny" → "openai/whisper-tiny"
+            tail = entry.name[len("models--"):]
+            parts = tail.split("--", 1)
+            if len(parts) == 2:
+                result.append(f"{parts[0]}/{parts[1]}")
+    return result
 
 
 def list_local_models(models_dir: Path) -> list[str]:

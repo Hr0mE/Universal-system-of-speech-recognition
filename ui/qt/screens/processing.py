@@ -6,13 +6,10 @@
 
 from __future__ import annotations
 
-import html
 import logging
 from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
-
-_log = logging.getLogger("ui.processing")
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -27,8 +24,135 @@ from PySide6.QtWidgets import (
 from core.config.pipeline_config import PipelineConfig
 from ui.qt.bus_bridge import BusToQtBridge
 from ui.qt.scale_manager import load_ui_scale
-from ui.qt.theme import BORDER, SUCCESS, TEXT_PRIMARY
 from ui.qt.worker import ResumeWorker, TranscribeWorker
+
+_log = logging.getLogger("ui.processing")
+
+
+class _StageTimeline(QWidget):
+    """Горизонтальный таймлайн этапов пайплайна.
+
+    Этапы создаются через setup(count), имена уточняются через update_name(index, name).
+    Активный этап получает тихий opacity-pulse (SineCurve, 900 мс).
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._hbox = QHBoxLayout(self)
+        self._hbox.setContentsMargins(0, 4, 0, 4)
+        self._hbox.setSpacing(4)
+        self._pills: list[QLabel] = []
+        self._active_anim: QPropertyAnimation | None = None
+        self._active_effect: QGraphicsOpacityEffect | None = None
+
+    # ── public API ──────────────────────────────────────────────────────
+
+    def setup(self, count: int) -> None:
+        """Создаёт count безымянных pill-ов; имена обновляются через update_name."""
+        self._clear()
+        for i in range(count):
+            if i > 0:
+                sep = QLabel("→")
+                sep.setObjectName("stage_sep")
+                self._hbox.addWidget(sep)
+            pill = QLabel(f"○  Этап {i + 1}")
+            pill.setObjectName("stage_pill")
+            pill.setProperty("stage_state", "pending")
+            self._hbox.addWidget(pill)
+            self._pills.append(pill)
+        self._hbox.addStretch()
+
+    def update_name(self, index: int, name: str) -> None:
+        """Обновить текст pill-а (1-based). Сохраняет текущий state-префикс."""
+        if not (0 < index <= len(self._pills)):
+            return
+        pill = self._pills[index - 1]
+        state = pill.property("stage_state") or "pending"
+        prefix = {"done": "✓", "active": "▶", "error": "⚠"}.get(state, "○")
+        pill.setText(f"{prefix}  {name}")
+
+    def mark_active(self, index: int) -> None:
+        """Пометить этап активным + запустить тихий opacity-pulse."""
+        self._stop_anim()
+        if not (0 < index <= len(self._pills)):
+            return
+        pill = self._pills[index - 1]
+        self._set_pill_prefix(pill, "▶", "active")
+        effect = QGraphicsOpacityEffect(pill)
+        pill.setGraphicsEffect(effect)
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(900)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.35)
+        anim.setEasingCurve(QEasingCurve.Type.SineCurve)
+        anim.setLoopCount(-1)
+        anim.start()
+        self._active_anim = anim
+        self._active_effect = effect
+
+    def mark_done(self, index: int) -> None:
+        """Завершить этап. Останавливает pulse если был активен."""
+        self._stop_anim()
+        if not (0 < index <= len(self._pills)):
+            return
+        pill = self._pills[index - 1]
+        pill.setGraphicsEffect(None)
+        self._set_pill_prefix(pill, "✓", "done")
+
+    def mark_error(self) -> None:
+        """Отметить текущий активный этап как ошибочный."""
+        self._stop_anim()
+        for pill in self._pills:
+            if pill.property("stage_state") == "active":
+                pill.setGraphicsEffect(None)
+                self._set_pill_prefix(pill, "⚠", "error")
+                break
+
+    def mark_all_done(self) -> None:
+        """Пометить все этапы завершёнными (pipeline_done)."""
+        self._stop_anim()
+        for pill in self._pills:
+            pill.setGraphicsEffect(None)
+            self._set_pill_prefix(pill, "✓", "done")
+
+    def freeze(self) -> None:
+        """Остановить pulse-анимацию, зафиксировав активный pill в ярком положении."""
+        self._stop_anim()
+
+    def reset(self) -> None:
+        """Сбросить все pill-ы в pending."""
+        self._stop_anim()
+        for pill in self._pills:
+            pill.setGraphicsEffect(None)
+            self._set_pill_prefix(pill, "○", "pending")
+
+    # ── private ─────────────────────────────────────────────────────────
+
+    def _clear(self) -> None:
+        self._stop_anim()
+        while self._hbox.count():
+            item = self._hbox.takeAt(0)
+            if item and item.widget():
+                item.widget().deleteLater()
+        self._pills.clear()
+
+    @staticmethod
+    def _set_pill_prefix(pill: QLabel, prefix: str, state: str) -> None:
+        text = pill.text()
+        parts = text.split("  ", 1)
+        name = parts[1] if len(parts) == 2 else text
+        pill.setText(f"{prefix}  {name}")
+        pill.setProperty("stage_state", state)
+        pill.style().unpolish(pill)
+        pill.style().polish(pill)
+
+    def _stop_anim(self) -> None:
+        if self._active_anim:
+            self._active_anim.stop()
+            self._active_anim = None
+        if self._active_effect:
+            self._active_effect.setOpacity(1.0)
+            self._active_effect = None
 
 
 class ProcessingScreen(QWidget):
@@ -63,19 +187,13 @@ class ProcessingScreen(QWidget):
         self._current_audio_path: Path | None = None
         self._stop_btn_is_resume: bool = False
         self._build_ui()
-        self._setup_pulse()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def start(self, audio_path: Path, models_config: PipelineConfig) -> None:
-        """Запускает новую транскрибацию аудиофайла.
-
-        Args:
-            audio_path (Path): Путь к входному аудиофайлу.
-            models_config (ModelsConfig): Конфигурация моделей для транскрибации.
-        """
+        """Запускает новую транскрибацию аудиофайла."""
         self._current_audio_path = audio_path
         self._header_label.setText(audio_path.name)
         self._reset_widgets()
@@ -93,13 +211,7 @@ class ProcessingScreen(QWidget):
         self._worker.start()
 
     def start_resume(self, run_dir: Path, audio_path: Path, models_config: PipelineConfig) -> None:
-        """Возобновляет прерванный запуск из директории run_dir.
-
-        Args:
-            run_dir (Path): Директория существующего запуска.
-            audio_path (Path): Путь к аудиофайлу (для отображения имени).
-            models_config (ModelsConfig): Конфигурация моделей.
-        """
+        """Возобновляет прерванный запуск из директории run_dir."""
         self._current_audio_path = audio_path
         self._header_label.setText(audio_path.name)
         self._reset_widgets()
@@ -125,7 +237,7 @@ class ProcessingScreen(QWidget):
             )
         self._worker = None
         self._bridge = None
-        self._reset_widgets()   # resets _stopped_by_user and _stop_btn_is_resume via _reset_widgets
+        self._reset_widgets()
         self._reset_stop_btn()
         self._stop_btn.setEnabled(False)
         self._back_btn.setVisible(False)
@@ -141,17 +253,6 @@ class ProcessingScreen(QWidget):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _setup_pulse(self) -> None:
-        self._pulse_effect = QGraphicsOpacityEffect(self._stage_bar)
-        self._pulse_effect.setOpacity(1.0)
-        self._stage_bar.setGraphicsEffect(self._pulse_effect)
-        self._pulse_anim = QPropertyAnimation(self._pulse_effect, b"opacity", self)
-        self._pulse_anim.setDuration(900)
-        self._pulse_anim.setStartValue(1.0)
-        self._pulse_anim.setEndValue(0.35)
-        self._pulse_anim.setEasingCurve(QEasingCurve.Type.SineCurve)
-        self._pulse_anim.setLoopCount(-1)
 
     def _connect_bridge(self, bridge: BusToQtBridge) -> None:
         bridge.pipeline_started.connect(self._on_pipeline_started)
@@ -185,38 +286,30 @@ class ProcessingScreen(QWidget):
         header_row.addWidget(self._stop_btn)
         outer.addLayout(header_row)
 
-        # Indeterminate bar — hidden by default
-        self._download_bar = QProgressBar()
-        self._download_bar.setObjectName("download_bar")
-        self._download_bar.setMaximum(0)
-        self._download_bar.setProperty("status", "downloading")
-        self._download_bar.setFormat("Загрузка модели…")
-        self._download_bar.setVisible(False)
-        outer.addWidget(self._download_bar)
+        # Model download label with slow opacity pulse (replaces indeterminate QProgressBar)
+        self._download_label = QLabel("")
+        self._download_label.setObjectName("proc_download_label")
+        self._download_label.setVisible(False)
+        outer.addWidget(self._download_label)
+        self._dl_effect = QGraphicsOpacityEffect(self._download_label)
+        self._download_label.setGraphicsEffect(self._dl_effect)
+        self._dl_anim = QPropertyAnimation(self._dl_effect, b"opacity", self)
+        self._dl_anim.setDuration(1100)
+        self._dl_anim.setStartValue(1.0)
+        self._dl_anim.setEndValue(0.25)
+        self._dl_anim.setEasingCurve(QEasingCurve.Type.SineCurve)
+        self._dl_anim.setLoopCount(-1)
 
         # Status
         self._status_label = QLabel("Ожидание…")
         self._status_label.setObjectName("status_label")
         outer.addWidget(self._status_label)
 
-        # Stage progress
-        stage_row = QHBoxLayout()
-        stage_lbl = QLabel("Стадии:")
-        stage_lbl.setObjectName("muted")
-        stage_lbl.setMinimumWidth(int(72 * load_ui_scale()))
-        stage_row.addWidget(stage_lbl)
-        self._stage_bar = QProgressBar()
-        self._stage_bar.setObjectName("stage_bar")
-        self._stage_bar.setFormat("%v / %m")
-        stage_row.addWidget(self._stage_bar, stretch=1)
-        outer.addLayout(stage_row)
+        # Stage timeline (replaces _stage_bar + _stage_steps_label)
+        self._timeline = _StageTimeline()
+        outer.addWidget(self._timeline)
 
-        self._stage_steps_label = QLabel("")
-        self._stage_steps_label.setObjectName("muted")
-        self._stage_steps_label.setWordWrap(True)
-        outer.addWidget(self._stage_steps_label)
-
-        # Segment progress
+        # Segment progress (hidden until first _on_progress with real data)
         seg_row = QHBoxLayout()
         seg_lbl = QLabel("Сегменты:")
         seg_lbl.setObjectName("muted")
@@ -225,6 +318,7 @@ class ProcessingScreen(QWidget):
         self._seg_bar = QProgressBar()
         self._seg_bar.setObjectName("seg_bar")
         self._seg_bar.setFormat("%v / %m сегм.")
+        self._seg_bar.setVisible(False)
         seg_row.addWidget(self._seg_bar, stretch=1)
         outer.addLayout(seg_row)
 
@@ -253,16 +347,14 @@ class ProcessingScreen(QWidget):
         self._last_result = None
         self._stopped_by_user = False
         self._stop_btn_is_resume = False
-        self._stage_bar.setValue(0)
-        self._stage_bar.setMaximum(1)
-        self._stage_bar.setProperty("status", "")
-        self._stage_bar.style().unpolish(self._stage_bar)
-        self._stage_bar.style().polish(self._stage_bar)
+        self._timeline.reset()
         self._seg_bar.setValue(0)
         self._seg_bar.setMaximum(0)
-        self._stage_steps_label.setText("")
+        self._seg_bar.setVisible(False)
+        self._download_label.setVisible(False)
+        self._dl_anim.stop()
+        self._dl_effect.setOpacity(1.0)
         self._log_edit.clear()
-        self._download_bar.setVisible(False)
         self._status_label.setText("Ожидание…")
         self._status_label.setProperty("status", "")
         self._status_label.style().unpolish(self._status_label)
@@ -294,9 +386,11 @@ class ProcessingScreen(QWidget):
                 _log.warning("_do_stop: worker не имеет stop_requested (старый тип воркера)")
         else:
             _log.info("_do_stop: worker не запущен")
-        self._download_bar.setVisible(False)
+        self._download_label.setVisible(False)
+        self._dl_anim.stop()
+        self._dl_effect.setOpacity(1.0)
+        self._timeline.freeze()
 
-        # Show which stage was running when stopped
         stage_info = ""
         if self._current_stage and self._stage_names and self._current_stage <= len(self._stage_names):
             stage_info = f" на этапе [{self._current_stage}] {self._stage_names[self._current_stage - 1]}"
@@ -304,7 +398,6 @@ class ProcessingScreen(QWidget):
         self._log("> Остановлено пользователем")
         self._back_btn.setVisible(True)
 
-        # Find checkpoint and update state.json status to "stopped"
         from core.api.transcribe import find_resumable_run
         import json as _json
         _run_dir = find_resumable_run(Path("runs"), str(self._current_audio_path)) if self._current_audio_path else None
@@ -330,14 +423,11 @@ class ProcessingScreen(QWidget):
     # ------------------------------------------------------------------
 
     def _on_pipeline_started(self, total_stages: int, resume_after: int) -> None:
-        self._stage_bar.setMaximum(total_stages)
-        self._stage_bar.setValue(resume_after)
-        self._stage_bar.setProperty("status", "")
-        self._stage_bar.style().unpolish(self._stage_bar)
-        self._stage_bar.style().polish(self._stage_bar)
-        msg = f"Пайплайн запущен: {total_stages} стадий"
+        self._timeline.setup(total_stages)
+        # Не помечаем resume-этапы здесь — stage_skipped(index, name) придёт с именами
+        msg = f"Обработка запущена: {total_stages} этапов"
         if resume_after:
-            msg += f" (возобновление со стадии {resume_after + 1})"
+            msg += f" (возобновление с этапа {resume_after + 1})"
         self._log(msg)
 
     def _on_stage_started(self, index: int, name: str) -> None:
@@ -345,69 +435,65 @@ class ProcessingScreen(QWidget):
             self._stage_names.append("")
         self._stage_names[index - 1] = name
         self._current_stage = index
-        self._set_status(f"Стадия [{index}] {name}…", "running")
+        self._timeline.update_name(index, name)
+        self._timeline.mark_active(index)
+        self._set_status(f"Этап [{index}] {name}…", "running")
         self._seg_bar.setValue(0)
         self._seg_bar.setMaximum(0)
-        self._refresh_stage_steps()
-        self._log(f"Стадия [{index}] {name}: начало")
-        self._pulse_anim.start()
+        self._seg_bar.setVisible(False)
+        self._log(f"Этап [{index}] {name}: начало")
 
     def _on_stage_done(self, index: int, name: str, n_segs: int) -> None:
-        self._pulse_anim.stop()
-        self._pulse_effect.setOpacity(1.0)
         self._stages_done.add(index)
-        self._stage_bar.setValue(index)
-        self._refresh_stage_steps()
-        self._log(f"Стадия [{index}] {name}: готово ({n_segs} сегм.)")
+        self._timeline.mark_done(index)
+        self._log(f"Этап [{index}] {name}: готово ({n_segs} сегм.)")
 
     def _on_stage_skipped(self, index: int, name: str) -> None:
         self._stages_done.add(index)
         while len(self._stage_names) < index:
             self._stage_names.append("")
         self._stage_names[index - 1] = name
-        self._refresh_stage_steps()
-        self._log(f"Стадия [{index}] {name}: пропущена (уже выполнена)")
+        self._timeline.update_name(index, name)
+        self._timeline.mark_done(index)
+        self._log(f"Этап [{index}] {name}: пропущена (уже выполнена)")
 
     def _on_progress(self, _stage_index: int, current: int, total: int) -> None:
         if self._seg_bar.maximum() != total:
             self._seg_bar.setMaximum(total)
         self._seg_bar.setValue(current)
+        if not self._seg_bar.isVisible():
+            self._seg_bar.setVisible(True)
 
     def _on_pipeline_done(self, n_segs: int) -> None:
-        self._pulse_anim.stop()
-        self._pulse_effect.setOpacity(1.0)
+        self._timeline.mark_all_done()
         self._set_status(f"Готово — {n_segs} сегментов", "success")
-        self._stage_bar.setProperty("status", "done")
-        self._stage_bar.style().unpolish(self._stage_bar)
-        self._stage_bar.style().polish(self._stage_bar)
-        self._log(f"Пайплайн завершён: {n_segs} сегментов")
+        self._log(f"Обработка завершена: {n_segs} сегментов")
         self._stop_btn.setEnabled(False)
 
     def _on_pipeline_failed(self, error: str) -> None:
-        self._pulse_anim.stop()
-        self._pulse_effect.setOpacity(1.0)
+        self._timeline.mark_error()
         self._set_status("Ошибка!", "error")
-        self._stage_bar.setProperty("status", "error")
-        self._stage_bar.style().unpolish(self._stage_bar)
-        self._stage_bar.style().polish(self._stage_bar)
-        self._download_bar.setVisible(False)
+        self._download_label.setVisible(False)
+        self._dl_anim.stop()
+        self._dl_effect.setOpacity(1.0)
         self._log(f"ОШИБКА: {error}")
         self._stop_btn.setEnabled(False)
         self._back_btn.setVisible(True)
 
     def _on_model_downloading(self, name: str, repo_id: str) -> None:
-        self._download_bar.setFormat(f"Загрузка {name}…")
-        self._download_bar.setVisible(True)
+        self._download_label.setText(f"Загрузка модели {name}…")
+        self._download_label.setVisible(True)
+        self._dl_anim.start()
         self._set_status(f"Загрузка модели {name}…", "running")
         self._log(f"Загрузка: {name} ({repo_id})")
 
     def _on_model_ready(self, name: str) -> None:
-        self._download_bar.setVisible(False)
+        self._download_label.setVisible(False)
+        self._dl_anim.stop()
+        self._dl_effect.setOpacity(1.0)
         self._log(f"Модель готова: {name}")
 
     def _on_worker_finished(self, result) -> None:
-        # sender() — воркер, который выпустил сигнал; self._worker — текущий.
-        # Если не совпадают — это «старый» воркер после reset(), игнорируем навигацию.
         stale = self.sender() is not self._worker
         _log.info(
             "_on_worker_finished: run_id=%s  stopped_by_user=%s  stale_worker=%s",
@@ -423,9 +509,11 @@ class ProcessingScreen(QWidget):
         stale = self.sender() is not self._worker
         _log.info("_on_worker_failed: msg=%r  stale=%s", msg, stale)
         if stale:
-            return  # старый воркер упал после reset() — не трогаем UI
+            return
         self._set_status(f"Ошибка: {msg}", "error")
-        self._download_bar.setVisible(False)
+        self._download_label.setVisible(False)
+        self._dl_anim.stop()
+        self._dl_effect.setOpacity(1.0)
         self._log(f"ОШИБКА: {msg}")
         self._stop_btn.setEnabled(False)
         self._back_btn.setVisible(True)
@@ -434,21 +522,6 @@ class ProcessingScreen(QWidget):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _refresh_stage_steps(self) -> None:
-        if not self._stage_names:
-            self._stage_steps_label.setText("")
-            return
-        parts = []
-        for idx, name in enumerate(self._stage_names, start=1):
-            esc = html.escape(name)
-            if idx in self._stages_done:
-                parts.append(f'<span style="color:{SUCCESS}">✓ {esc}</span>')
-            elif idx == self._current_stage:
-                parts.append(f'<span style="color:{TEXT_PRIMARY};font-weight:bold">→ {esc}</span>')
-            else:
-                parts.append(f'<span style="color:{BORDER}">{esc}</span>')
-        self._stage_steps_label.setText("  ".join(parts))
 
     def _set_status(self, text: str, status: str) -> None:
         self._status_label.setText(text)

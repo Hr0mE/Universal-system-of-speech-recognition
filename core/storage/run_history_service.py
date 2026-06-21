@@ -86,11 +86,14 @@ class RunSummary:
 class RunHistoryService:
     """Сервис истории запусков: читает метаданные без загрузки сегментов."""
 
-    def load_all(self, runs_dir: Path) -> list[RunSummary]:
-        """Загружает сводки всех запусков из директории.
+    def load_all(self, runs_dir: Path, *, limit: int | None = None) -> list[RunSummary]:
+        """Загружает сводки запусков из директории.
 
         Args:
             runs_dir (Path): Корневая директория запусков (например, ``Path("runs")``).
+            limit: Максимальное число записей. ``None`` — загрузить все.
+                   При наличии лимита отбираются новейшие записи по имени папки
+                   (timestamp закодирован в run_id) без чтения файлов.
 
         Returns:
             list[RunSummary]: Список сводок, отсортированных по дате (новые первыми).
@@ -98,10 +101,16 @@ class RunHistoryService:
         if not runs_dir.exists():
             return []
 
+        run_dirs = [d for d in runs_dir.iterdir() if d.is_dir() and d.name.startswith("run_")]
+
+        # Pre-sort by timestamp in dir name — no file reads needed
+        run_dirs.sort(key=lambda d: _run_created_at(d.name), reverse=True)
+
+        if limit is not None:
+            run_dirs = run_dirs[:limit]
+
         summaries: list[RunSummary] = []
-        for run_dir in runs_dir.iterdir():
-            if not run_dir.is_dir():
-                continue
+        for run_dir in run_dirs:
             summary = self._load_summary(run_dir)
             if summary:
                 summaries.append(summary)

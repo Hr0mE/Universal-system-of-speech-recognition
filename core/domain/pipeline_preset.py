@@ -45,7 +45,9 @@ class PipelinePreset:
             preset_id=_new_preset_id(),
             name=name,
             config=config,
-            created_at=datetime.now().isoformat(timespec="seconds"),
+            # microseconds (не seconds): пресеты, созданные в одну секунду, должны
+            # сохранять детерминированный порядок «newest first» в load_all().
+            created_at=datetime.now().isoformat(timespec="microseconds"),
         )
 
     def to_dict(self) -> dict[str, Any]:

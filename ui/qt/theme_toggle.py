@@ -20,10 +20,10 @@ from PySide6.QtWidgets import QWidget
 
 # ── Color tokens (mirrors theme.py) ─────────────────────────────────────────
 
-_C_DARK_TRACK   = QColor("#232329")          # BORDER
-_C_DARK_BORDER  = QColor("#3F3F46")          # BORDER_LIGHT
-_C_DARK_THUMB   = QColor("#3F3F46")          # ZINC_700
-_C_DARK_ICON    = QColor("#A1A1AA")          # ZINC_400 — muted moon
+_C_DARK_TRACK   = QColor("#2D2D35")          # slightly above BORDER
+_C_DARK_BORDER  = QColor("#52525B")          # ZINC_600
+_C_DARK_THUMB   = QColor("#52525B")          # ZINC_600
+_C_DARK_ICON    = QColor("#C4C4CC")          # ZINC_300 — brighter moon
 
 _C_LIGHT_TRACK  = QColor(99, 102, 241, 30)   # ACCENT_TINT ≈ rgba(99,102,241,0.12)
 _C_LIGHT_BORDER = QColor("#6366F1")          # ACCENT

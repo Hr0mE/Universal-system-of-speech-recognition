@@ -24,16 +24,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.hf_catalog import is_cached
+from core.hf_catalog import is_cached, list_cached_hf_repos
 from plugins.manifest import ModelOption, PluginManifest
 from ui.qt.hf_download_worker import HFDownloadWorker
-from ui.qt.scale_manager import load_hf_token, load_ui_scale, save_hf_token
+from ui.qt.scale_manager import (
+    load_custom_models,
+    load_hf_token,
+    load_ui_scale,
+    save_custom_models,
+    save_hf_token,
+)
 
 _TYPE_LABEL = {
-    "asr":         "ASR — Распознавание речи",
+    "asr":         "Распознавание речи",
     "language":    "Определение языка",
-    "diarization": "Диаризация (разделение спикеров)",
-    "stage":       "Стадии пайплайна",
+    "diarization": "Разделение по голосам",
+    "stage":       "Этапы обработки",
 }
 
 _TYPE_ORDER = ["asr", "language", "diarization", "stage"]
@@ -45,19 +51,13 @@ _TYPE_COLOR = {
     "stage":       "#71717A",
 }
 
-_TYPE_SHORT = {
-    "asr":         "ASR",
-    "language":    "ЯЗ",
-    "diarization": "DIA",
-    "stage":       "STG",
-}
 
 _FILTER_LABELS = [
     ("all",         "Все"),
-    ("asr",         "ASR"),
+    ("asr",         "Речь"),
     ("language",    "Язык"),
-    ("diarization", "DIA"),
-    ("stage",       "Стадии"),
+    ("diarization", "Голоса"),
+    ("stage",       "Этапы"),
 ]
 
 # По одной "рекомендуемой" модели на каждый тип задачи
@@ -85,6 +85,16 @@ def _speed_tag(size_mb: int) -> tuple[str, str]:
     if size_mb <= 1500:
         return "Средне", "speed_medium"
     return "Медленно", "speed_slow"
+
+
+def _guess_model_type(repo_id: str) -> str:
+    """Guess model_type from repo_id for models discovered outside the app."""
+    lower = repo_id.lower()
+    if any(x in lower for x in ("diarization", "speaker", "pyannote")):
+        return "diarization"
+    if any(x in lower for x in ("lid", "language-id", "language_id", "lang-detect", "mms-lid")):
+        return "language"
+    return "asr"
 
 
 def _parse_dl_error(err: str) -> str:
@@ -147,18 +157,6 @@ class _ModelRow(QFrame):
             f"QFrame {{ background: {color}; border-radius: 2px; min-height: 0; }}"
         )
         row.addWidget(strip)
-        row.addSpacing(12)
-
-        # ── Type badge ────────────────────────────────────────────────
-        short = _TYPE_SHORT.get(self._type_key, self._type_key[:3].upper())
-        badge = QLabel(short)
-        badge.setFixedWidth(32)
-        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge.setStyleSheet(
-            f"QLabel {{ background: {color}22; color: {color}; border-radius: 3px; "
-            f"font-size: 10px; font-weight: bold; padding: 2px 0; }}"
-        )
-        row.addWidget(badge)
         row.addSpacing(12)
 
         # ── Name + tags column ────────────────────────────────────────
@@ -276,7 +274,7 @@ class _ModelRow(QFrame):
         if self._is_custom:
             del_btn = QPushButton("×")
             del_btn.setObjectName("custom_del_btn")
-            _s = int(20 * load_ui_scale())
+            _s = int(16 * load_ui_scale())
             del_btn.setFixedSize(_s, _s)
             del_btn.clicked.connect(
                 lambda: self.remove_requested.emit(self._option.hf_repo or "")
@@ -469,7 +467,7 @@ class ModelsScreen(QWidget):
         self._sections:            list[_ManifestSection]  = []
         self._sections_by_type:    dict[str, _ManifestSection] = {}
         self._active_downloads:    dict[str, HFDownloadWorker] = {}
-        self._custom_repo_to_type: dict[str, str]          = {}  # repo_id → type_key
+        self._custom_repo_to_type: dict[str, str]          = load_custom_models()
         self._active_filter:       str                     = "all"
         self._filter_btns:         dict[str, QPushButton]  = {}
         self._pending_repo:        str | None              = None
@@ -510,6 +508,26 @@ class ModelsScreen(QWidget):
             placeholder = QLabel("Плагины не загружены")
             placeholder.setObjectName("muted")
             self._sections_layout.insertWidget(0, placeholder)
+
+        # Collect repo_ids already represented in manifest sections
+        shown: set[str] = {
+            row.repo_id
+            for sec in self._sections
+            for row in sec._rows
+            if row.repo_id
+        }
+
+        # Restore saved custom models (added explicitly by the user in a previous session)
+        for repo_id, type_key in self._custom_repo_to_type.items():
+            if repo_id not in shown and is_cached(repo_id):
+                self._add_custom_model_row(repo_id, type_key, save=False)
+                shown.add(repo_id)
+
+        # Surface any other fully-downloaded models from the HF cache
+        for repo_id in list_cached_hf_repos():
+            if repo_id not in shown:
+                self._add_custom_model_row(repo_id, _guess_model_type(repo_id), save=False)
+                shown.add(repo_id)
 
         self._apply_filter()
 
@@ -610,7 +628,7 @@ class ModelsScreen(QWidget):
         bh.addWidget(save_btn)
 
         dismiss_btn = QPushButton("×")
-        _sd = int(24 * load_ui_scale())
+        _sd = int(16 * load_ui_scale())
         dismiss_btn.setFixedSize(_sd, _sd)
         dismiss_btn.setObjectName("custom_del_btn")
         dismiss_btn.clicked.connect(lambda: self._token_banner.hide())
@@ -654,8 +672,12 @@ class ModelsScreen(QWidget):
     # Custom model management
     # ------------------------------------------------------------------
 
-    def _add_custom_model_row(self, repo_id: str, type_key: str) -> None:
-        """Добавляет строку пользовательской модели в нужную секцию."""
+    def _add_custom_model_row(self, repo_id: str, type_key: str, *, save: bool = True) -> None:
+        """Добавляет строку пользовательской модели в нужную секцию.
+
+        save=True — явное добавление пользователем, сохраняется на диск.
+        save=False — восстановление при refresh(), не перезаписывает настройки.
+        """
         display_name = repo_id.split("/")[-1] if "/" in repo_id else repo_id
         opt = ModelOption(
             hf_repo=repo_id,
@@ -679,10 +701,16 @@ class ModelsScreen(QWidget):
 
         section.add_row(row)
         row.set_downloaded()
+
+        if save:
+            self._custom_repo_to_type[repo_id] = type_key
+            save_custom_models(self._custom_repo_to_type)
+
         self._apply_filter()
 
     def _on_remove_requested(self, repo_id: str) -> None:
         self._custom_repo_to_type.pop(repo_id, None)
+        save_custom_models(self._custom_repo_to_type)
         for section in self._sections:
             section.remove_row(repo_id)
 
@@ -741,6 +769,12 @@ class ModelsScreen(QWidget):
 
     def _on_dl_finished(self, repo_id: str) -> None:
         self._active_downloads.pop(repo_id, None)
+        if not is_cached(repo_id):
+            # terminate() race: signal arrived but download is incomplete
+            card = self._find_card(repo_id)
+            if card:
+                card.set_downloading(False)
+            return
         if repo_id in self._custom_repo_to_type:
             type_key = self._custom_repo_to_type[repo_id]
             self._add_custom_model_row(repo_id, type_key)

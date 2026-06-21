@@ -69,11 +69,22 @@ def test_search_models_passes_language_filter():
 
 # ── is_cached ────────────────────────────────────────────────────────────────
 
-def test_is_cached_true_when_dir_exists(tmp_path, monkeypatch):
+def test_is_cached_true_when_fully_downloaded(tmp_path, monkeypatch):
+    # is_cached считает модель скачанной только когда HF записал refs/main
+    # (полный snapshot), а не просто создал директорию.
     monkeypatch.setattr("core.hf_catalog._HF_CACHE_ROOT", tmp_path)
-    cache_dir = tmp_path / "models--Systran--faster-whisper-tiny"
-    cache_dir.mkdir()
+    refs_main = tmp_path / "models--Systran--faster-whisper-tiny" / "refs" / "main"
+    refs_main.parent.mkdir(parents=True)
+    refs_main.write_text("0123abcd")
     assert is_cached("Systran/faster-whisper-tiny") is True
+
+
+def test_is_cached_false_for_partial_download(tmp_path, monkeypatch):
+    # Директория есть (snapshot_download создаёт её сразу), но refs/main ещё нет
+    # → загрузка не завершена → не cached.
+    monkeypatch.setattr("core.hf_catalog._HF_CACHE_ROOT", tmp_path)
+    (tmp_path / "models--Systran--faster-whisper-tiny").mkdir()
+    assert is_cached("Systran/faster-whisper-tiny") is False
 
 
 def test_is_cached_false_when_dir_missing(tmp_path, monkeypatch):

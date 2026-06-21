@@ -534,7 +534,7 @@ class StageConfigDialog(QDialog):
         hdr.addWidget(add_btn)
         root.addLayout(hdr)
 
-        hint = QLabel("Если LID определил язык — используется соответствующая модель вместо дефолтной.")
+        hint = QLabel("Если язык определён автоматически — используется соответствующая модель вместо дефолтной.")
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         root.addWidget(hint)
@@ -2080,7 +2080,7 @@ class PipelineEditorScreen(QWidget):
         outer.setSpacing(16)
 
         header_row = QHBoxLayout()
-        title = QLabel("Пайплайн")
+        title = QLabel("Обработка")
         title.setObjectName("screen_title")
         header_row.addWidget(title)
         header_row.addStretch()

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, Qt, Signal
+from PySide6.QtCore import QMimeData, QSize, Qt, QThread, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -24,17 +24,40 @@ from PySide6.QtWidgets import (
 )
 
 from core.storage.run_history_service import RunHistoryService, RunSummary
-from ui.qt.scale_manager import load_ui_scale
-from ui.qt.theme import ERROR, STOPPED, SUCCESS, TEXT_MUTED, WARNING
+from ui.qt.icon_utils import svg_icon
+from ui.qt.scale_manager import load_ui_scale, load_ui_theme
+from ui.qt.theme import (
+    ERROR, LIGHT_ERROR,
+    STOPPED,
+    SUCCESS, LIGHT_SUCCESS,
+    TEXT_MUTED,
+    WARNING, LIGHT_WARNING,
+)
 
 _AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".m4a", ".ogg", ".flac"})
 
-_STATUS_ICON = {
-    "completed": ("✓",  SUCCESS),
-    "failed":    ("⚠",  ERROR),
-    "stopped":   ("◼",  STOPPED),
-    "running":   ("▶",  WARNING),
-    "pending":   ("○",  TEXT_MUTED),
+_STATUS_SVG = {
+    "completed": "check",
+    "failed":    "alert",
+    "stopped":   "control-stop",
+    "running":   "control-play",
+    "pending":   "time",
+}
+
+_STATUS_COLORS_DARK = {
+    "completed": SUCCESS,
+    "failed":    ERROR,
+    "stopped":   STOPPED,
+    "running":   WARNING,
+    "pending":   TEXT_MUTED,
+}
+
+_STATUS_COLORS_LIGHT = {
+    "completed": LIGHT_SUCCESS,
+    "failed":    LIGHT_ERROR,
+    "stopped":   STOPPED,
+    "running":   LIGHT_WARNING,
+    "pending":   TEXT_MUTED,
 }
 
 _STATUS_LABEL = {
@@ -46,8 +69,8 @@ _STATUS_LABEL = {
 }
 
 _STAGE_LABELS: dict[str, str] = {
-    "segmentation":        "Сегментация",
-    "diarization":         "Диаризация",
+    "segmentation":        "Разбивка",
+    "diarization":         "Разделение по голосам",
     "min_duration_filter": "Фильтрация",
     "language_detection":  "Определение языка",
     "asr":                 "Распознавание",
@@ -83,6 +106,24 @@ def _fmt_date(iso: str) -> str:
         return iso
 
 
+_INITIAL_LOAD_LIMIT = 15
+
+
+class _BgLoader(QThread):
+    """Фоновая загрузка полного списка ранов без ограничения."""
+
+    loaded = Signal(object)  # list[RunSummary]
+
+    def __init__(self, service: "RunHistoryService", runs_dir: Path) -> None:
+        super().__init__()
+        self._service = service
+        self._runs_dir = runs_dir
+
+    def run(self) -> None:
+        summaries = self._service.load_all(self._runs_dir)
+        self.loaded.emit(summaries)
+
+
 class _RunCard(QFrame):
     clicked          = Signal(str)  # run_id — open result
     resume_requested = Signal(str)  # run_id — resume interrupted run
@@ -106,10 +147,14 @@ class _RunCard(QFrame):
         hbox.setSpacing(12)
 
         # Status icon column
-        icon_char, _ = _STATUS_ICON.get(s.status, ("○", TEXT_MUTED))
-        icon_lbl = QLabel(icon_char)
+        _colors = _STATUS_COLORS_DARK if load_ui_theme() == "dark" else _STATUS_COLORS_LIGHT
+        _svg    = _STATUS_SVG.get(s.status, "time")
+        _color  = _colors.get(s.status, TEXT_MUTED)
+        icon_lbl = QLabel()
         icon_lbl.setObjectName("run_status_icon")
-        icon_lbl.setProperty("run_status", s.status)
+        icon_lbl.setFixedSize(14, 14)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_lbl.setPixmap(svg_icon(_svg, _color, 14).pixmap(QSize(14, 14)))
         hbox.addWidget(icon_lbl)
 
         # Left: file name + model/duration info
@@ -174,8 +219,10 @@ class _RunCard(QFrame):
         if s.is_resumable:
             btn_row = QHBoxLayout()
             btn_row.setContentsMargins(28, 0, 0, 0)
-            resume_btn = QPushButton("▶  Возобновить")
+            resume_btn = QPushButton("Возобновить")
             resume_btn.setObjectName("run_btn")
+            resume_btn.setIcon(svg_icon("control-play", "#ffffff", 14))
+            resume_btn.setIconSize(QSize(14, 14))
             resume_btn.clicked.connect(lambda: self.resume_requested.emit(self.run_id))
             btn_row.addWidget(resume_btn)
             btn_row.addStretch()
@@ -200,6 +247,7 @@ class ProjectsScreen(QWidget):
         self._service = RunHistoryService()
         self._all_summaries: list[RunSummary] = []
         self._active_filter = _FILTER_ALL
+        self._bg_loader: _BgLoader | None = None
         self._build_ui()
 
     # ------------------------------------------------------------------
@@ -207,12 +255,59 @@ class ProjectsScreen(QWidget):
     # ------------------------------------------------------------------
 
     def refresh(self, runs_dir: Path) -> None:
-        """Перечитывает запуски из директории и обновляет список."""
-        self._all_summaries = self._service.load_all(runs_dir)
+        """Показывает первые 15 ранов мгновенно, остальные подгружает фоном."""
+        self._all_summaries = self._service.load_all(runs_dir, limit=_INITIAL_LOAD_LIMIT)
         self._apply_filter()
+        self._start_bg_load(runs_dir)
 
     def run_count(self) -> int:
         return len(self._all_summaries)
+
+    def _start_bg_load(self, runs_dir: Path) -> None:
+        if self._bg_loader is not None:
+            try:
+                self._bg_loader.loaded.disconnect(self._on_all_loaded)
+            except RuntimeError:
+                pass
+        self._bg_loader = _BgLoader(self._service, runs_dir)
+        self._bg_loader.loaded.connect(self._on_all_loaded)
+        self._bg_loader.start()
+
+    def _on_all_loaded(self, summaries: list[RunSummary]) -> None:
+        prev_count = len(self._all_summaries)
+        if len(summaries) <= prev_count:
+            return
+        new_summaries = summaries[prev_count:]
+        self._all_summaries = summaries
+        self._append_runs(new_summaries)
+
+    def _append_runs(self, new_summaries: list[RunSummary]) -> None:
+        """Дописывает карточки в конец списка без сноса существующих."""
+        if self._active_filter == _FILTER_COMPLETED:
+            visible = [s for s in new_summaries if s.status == "completed"]
+        elif self._active_filter == _FILTER_INCOMPLETE:
+            visible = [
+                s for s in new_summaries
+                if s.status in ("failed", "stopped", "running", "pending")
+            ]
+        else:
+            visible = list(new_summaries)
+
+        if not visible:
+            return
+
+        # Переключить на список если сейчас показан empty-state
+        self._stack.setCurrentIndex(1)
+
+        # Вставить перед trailing stretch (он всегда последний в layout)
+        insert_pos = self._list_layout.count() - 1
+        for i, s in enumerate(visible):
+            card = _RunCard(s)
+            if s.has_result:
+                card.clicked.connect(self.run_selected)
+            if s.is_resumable:
+                card.resume_requested.connect(self.resume_run_requested)
+            self._list_layout.insertWidget(insert_pos + i, card)
 
     # ------------------------------------------------------------------
     # Drag-and-drop

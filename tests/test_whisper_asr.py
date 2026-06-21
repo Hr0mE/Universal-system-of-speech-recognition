@@ -69,7 +69,7 @@ def test_faster_whisper_asr_name():
 def test_default_params():
     asr = FasterWhisperASR()
     assert asr.model_size == "tiny"
-    assert asr.language == "en"
+    assert asr.language is None  # дефолт — авто-детекция языка (None), не "en"
     assert asr.device == "cpu"
     assert asr.compute_type == "int8"
 

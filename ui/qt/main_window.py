@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         """Инициализирует главное окно и все дочерние экраны."""
         super().__init__()
-        self.setWindowTitle("Транскрипция")
+        self.setWindowTitle("Расшифровка")
         self.setMinimumSize(620, 460)
         self.resize(1300, 820)
 
@@ -175,11 +175,13 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def show_projects(self) -> None:
+        self._nav.mark_section("projects")
+        self._nav.mark_active(None)
+        self._nav.repaint()
         self._processing.reset()
         self._abandon_current_project()
         self._projects_screen.refresh(_RUNS_DIR)
         self._refresh_nav()
-        self._nav.mark_active(None)
         self._stack.setCurrentIndex(_SCREEN_PROJECTS)
 
     def show_welcome(self) -> None:
@@ -190,29 +192,36 @@ class MainWindow(QMainWindow):
         self._update_config_hint()
         self._current_result = None
         self._nav.mark_active(None)
+        self._nav.mark_section(None)
         self._stack.setCurrentIndex(_SCREEN_WELCOME)
 
     def show_models(self) -> None:
+        self._nav.mark_section("models")
+        self._nav.mark_active(None)
+        self._nav.repaint()
         self._abandon_current_project()
         self._models_screen.refresh(self._all_manifests)
-        self._nav.mark_active(None)
         self._stack.setCurrentIndex(_SCREEN_MODELS)
 
     def show_pipeline(self) -> None:
+        self._nav.mark_section("pipeline")
+        self._nav.mark_active(None)
+        self._nav.repaint()
         self._abandon_current_project()
         self._pipeline_screen.load(self._pipeline_config, self._all_manifests, restore_missing=False)
-        self._nav.mark_active(None)
         self._stack.setCurrentIndex(_SCREEN_PIPELINE)
 
     def _show_processing(self, audio_path: Path) -> None:
         self._processing.reset()
         self._processing.start(audio_path, self._pipeline_config)
+        self._nav.mark_section(None)
         self._stack.setCurrentIndex(_SCREEN_PROCESSING)
 
     def _show_result(self, result: TranscriptionResult) -> None:
         self._prev_screen = self._stack.currentIndex()
         self._current_result = result
         self._result.show_result(result)
+        self._nav.mark_section(None)
         self._stack.setCurrentIndex(_SCREEN_RESULT)
         if self._current_project:
             self._nav.mark_active(self._current_project.project_id)
@@ -371,7 +380,7 @@ class MainWindow(QMainWindow):
         self._pipeline_config = config
         config.save()
         self._update_config_hint()
-        self._toast.show("Пайплайн сохранён", ToastLevel.SUCCESS)
+        self._toast.show("Настройка сохранена", ToastLevel.SUCCESS)
 
     def _on_editor_back(self) -> None:
         if self._current_result:
@@ -389,10 +398,11 @@ class MainWindow(QMainWindow):
     def _open_startup_screen(self) -> None:
         self._projects_screen.refresh(_RUNS_DIR)
         if self._projects_screen.run_count():
+            self._nav.mark_section("projects")
             self._stack.setCurrentIndex(_SCREEN_PROJECTS)
         else:
-            self._stack.setCurrentIndex(_SCREEN_WELCOME)
             self._update_config_hint()
+            self._stack.setCurrentIndex(_SCREEN_WELCOME)
 
     # ------------------------------------------------------------------
     # Settings
@@ -454,10 +464,13 @@ class MainWindow(QMainWindow):
         self._scale = max(SCALE_MIN, min(SCALE_MAX, scale))
         self._pending_scale = self._scale
         apply_theme(QApplication.instance(), self._scale, self._theme)
+        self._nav.set_scale(self._scale)
+        self._editor.set_scale(self._scale)
 
     def _on_theme_toggle(self) -> None:
         self._theme = "light" if self._theme == "dark" else "dark"
         self._nav.update_theme_btn(self._theme)
+        self._editor.set_theme(self._theme)
         # Defer stylesheet recompute to the next event-loop iteration so the
         # toggle animation gets at least one paint frame before Qt re-evaluates
         # all QSS rules against the full widget tree (~100+ widgets × 200 rules).

@@ -67,9 +67,9 @@ from ui.qt.scale_manager import load_hf_token, load_ui_scale
 _log = logging.getLogger("ui.hf_browser")
 
 _TYPE_LABELS: dict[str, str] = {
-    "asr":         "ASR — Распознавание речи",
+    "asr":         "Распознавание речи",
     "language":    "Определение языка",
-    "diarization": "Диаризация",
+    "diarization": "Разделение по голосам",
 }
 
 _COLS = ["Модель (repo_id)", "↓ Загрузок", "★ Рейтинг", "Параметры", "Вес", "Дата", "Языки", "Кэш"]

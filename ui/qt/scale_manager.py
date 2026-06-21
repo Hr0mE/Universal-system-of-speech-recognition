@@ -8,10 +8,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, Qt, Signal
+
+_log = logging.getLogger("ui.settings")
 
 _SETTINGS_FILE = Path.home() / ".ussr_diplom" / "ui_settings.json"
 
@@ -20,76 +25,81 @@ SCALE_MAX = 2.0
 SCALE_DEFAULT = 1.0
 
 
+def _read_settings() -> dict:
+    """Читает файл настроек одним местом. Нет файла → {}; повреждён → {} + предупреждение."""
+    try:
+        return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (json.JSONDecodeError, OSError) as exc:
+        _log.warning(
+            "Файл настроек повреждён или нечитаем (%s) — использую значения по умолчанию", exc
+        )
+        return {}
+
+
+def _update_settings(**changes) -> None:
+    """Атомарно обновляет настройки: read-modify-write через временный файл + ``os.replace``.
+
+    Атомарная замена защищает от потери всех настроек, если запись прервётся на полпути.
+    """
+    try:
+        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data = _read_settings()
+        data.update(changes)
+        fd, tmp = tempfile.mkstemp(
+            dir=str(_SETTINGS_FILE.parent), prefix=".ui_settings_", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp, _SETTINGS_FILE)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+    except OSError as exc:
+        _log.warning("Не удалось сохранить настройки (%s)", exc)
+
+
 def load_ui_scale() -> float:
     try:
-        data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-        return float(data.get("ui_scale", SCALE_DEFAULT))
-    except Exception:
+        return float(_read_settings().get("ui_scale", SCALE_DEFAULT))
+    except (TypeError, ValueError):
         return SCALE_DEFAULT
 
 
 def save_ui_scale(factor: float) -> None:
-    try:
-        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        existing: dict = {}
-        if _SETTINGS_FILE.exists():
-            try:
-                existing = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        existing["ui_scale"] = round(factor, 3)
-        _SETTINGS_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    _update_settings(ui_scale=round(factor, 3))
 
 
 def load_ui_theme() -> str:
-    try:
-        data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-        theme = str(data.get("ui_theme", "dark"))
-        return theme if theme in ("dark", "light") else "dark"
-    except Exception:
-        return "dark"
+    theme = str(_read_settings().get("ui_theme", "dark"))
+    return theme if theme in ("dark", "light") else "dark"
 
 
 def save_ui_theme(theme: str) -> None:
-    try:
-        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        existing: dict = {}
-        if _SETTINGS_FILE.exists():
-            try:
-                existing = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        existing["ui_theme"] = theme
-        _SETTINGS_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    _update_settings(ui_theme=theme)
 
 
 def load_hf_token() -> str:
     """Читает HuggingFace токен из файла настроек."""
-    try:
-        data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-        return str(data.get("hf_token", ""))
-    except Exception:
-        return ""
+    return str(_read_settings().get("hf_token", ""))
 
 
 def save_hf_token(token: str) -> None:
     """Сохраняет HuggingFace токен в файл настроек."""
-    try:
-        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        existing: dict = {}
-        if _SETTINGS_FILE.exists():
-            try:
-                existing = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        existing["hf_token"] = token
-        _SETTINGS_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    _update_settings(hf_token=token)
+
+
+def load_custom_models() -> dict[str, str]:
+    """Return {repo_id: model_type} for user-added models (persisted across sessions)."""
+    val = _read_settings().get("custom_models", {})
+    return dict(val) if isinstance(val, dict) else {}
+
+
+def save_custom_models(models: dict[str, str]) -> None:
+    """Persist {repo_id: model_type} for user-added models."""
+    _update_settings(custom_models=models)
 
 
 def scale_qss(qss: str, scale: float) -> str:
