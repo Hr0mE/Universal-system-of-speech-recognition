@@ -9,22 +9,18 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, Qt, Signal
 from PySide6.QtWidgets import (
-    QApplication,
     QCheckBox,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
-    QToolButton,
     QVBoxLayout,
     QWidget,
     QComboBox,
@@ -33,7 +29,6 @@ from PySide6.QtWidgets import (
 )
 
 from core.api.transcribe import TranscriptionResult, save_run_result
-from core.export import build_meeting_report, export_json, export_txt
 from core.export.report import _fmt_time
 from core.pipeline.context import Segment
 from ui.qt.audio_player import AudioPlayerWidget
@@ -130,53 +125,6 @@ class _SegItem(QFrame):
         self.clicked.emit()
 
 
-class _SpeakerLegend(QWidget):
-    """Компактная легенда спикеров: 2 элемента в колонке, несколько колонок."""
-
-    _ROWS = 2
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._grid = QHBoxLayout(self)
-        self._grid.setContentsMargins(0, 0, 0, 0)
-        self._grid.setSpacing(16)
-
-    def refresh(self, speakers: list[str]) -> None:
-        while self._grid.count():
-            item = self._grid.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        if not speakers:
-            return
-
-        for col_start in range(0, len(speakers), self._ROWS):
-            col_w = QWidget()
-            col_v = QVBoxLayout(col_w)
-            col_v.setContentsMargins(0, 0, 0, 0)
-            col_v.setSpacing(2)
-            for row in range(self._ROWS):
-                idx = col_start + row
-                if idx >= len(speakers):
-                    break
-                spk = speakers[idx]
-                color = _SPEAKER_COLORS[idx % len(_SPEAKER_COLORS)]
-                row_w = QWidget()
-                row_h = QHBoxLayout(row_w)
-                row_h.setContentsMargins(0, 0, 0, 0)
-                row_h.setSpacing(4)
-                dot = QLabel("●")
-                dot.setStyleSheet(
-                    f"color: {color}; font-size: 9px; background: transparent;"
-                )
-                name_lbl = QLabel(_truncate(spk, 16))
-                name_lbl.setObjectName("muted")
-                name_lbl.setStyleSheet("font-size: 11px;")
-                row_h.addWidget(dot)
-                row_h.addWidget(name_lbl)
-                col_v.addWidget(row_w)
-            self._grid.addWidget(col_w)
-
 
 class TranscriptEditorScreen(QWidget):
     """Two-panel transcript editor: segment list (left) + detail editor (right)."""
@@ -250,24 +198,20 @@ class TranscriptEditorScreen(QWidget):
         self._revert_btn.clicked.connect(self._revert)
         header_layout.addWidget(self._revert_btn)
 
-        save_btn = QPushButton("Сохранить")
-        save_btn.setObjectName("run_btn")
-        save_btn.clicked.connect(self._save)
+        self._save_btn = QPushButton("Сохранить")
+        self._save_btn.setObjectName("run_btn")
+        self._save_btn.clicked.connect(self._save)
+        header_layout.addWidget(self._save_btn)
 
-        self._dirty_badge = QLabel("● несохранённые")
+        # Dirty badge is an overlay child of header_bar (not in any layout).
+        # Positioned programmatically below the save button so it never
+        # pushes other widgets or changes the header height.
+        self._dirty_badge = QLabel("● несохранённые", header_bar)
         self._dirty_badge.setObjectName("dirty_badge")
         self._dirty_badge.setVisible(False)
-        self._dirty_badge.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._dirty_badge.adjustSize()
 
-        save_wrap = QWidget()
-        save_wrap.setStyleSheet("background: transparent;")
-        save_vbox = QVBoxLayout(save_wrap)
-        save_vbox.setContentsMargins(0, 0, 0, 0)
-        save_vbox.setSpacing(1)
-        save_vbox.addWidget(save_btn)
-        save_vbox.addWidget(self._dirty_badge)
-        header_layout.addWidget(save_wrap)
-
+        self._header_bar = header_bar
         outer.addWidget(header_bar)
 
         # Main split: left list + right editor
@@ -333,39 +277,18 @@ class TranscriptEditorScreen(QWidget):
         outer.addWidget(self._audio_player)
         self._audio_player.zoom_changed.connect(self._timeline.set_zoom)
 
-        # Footer: action buttons + reference info
+        # Footer: compact run/segment/duration info, right-aligned
         footer_widget = QWidget()
         footer_widget.setObjectName("editor_footer")
         footer_layout = QHBoxLayout(footer_widget)
         footer_layout.setContentsMargins(16, 0, 16, 0)
-        footer_layout.setSpacing(8)
+        footer_layout.setSpacing(0)
 
-        self._copy_btn = QPushButton("Копировать всё")
-        self._copy_btn.clicked.connect(self._on_copy_all)
-        footer_layout.addWidget(self._copy_btn)
-
-        export_menu = QMenu()
-        export_menu.addAction("Сохранить JSON", self._on_save_json)
-        export_menu.addAction("Сохранить TXT", self._on_save_txt)
-        self._export_btn = QToolButton()
-        self._export_btn.setText("Экспорт")
-        self._export_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self._export_btn.setMenu(export_menu)
-        footer_layout.addWidget(self._export_btn)
-
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet(f"color: {TEXT_MUTED};")
-        footer_layout.addWidget(sep)
+        footer_layout.addStretch()
 
         self._footer_stats = QLabel("")
         self._footer_stats.setObjectName("muted")
         footer_layout.addWidget(self._footer_stats)
-
-        footer_layout.addStretch()
-
-        self._speaker_legend = _SpeakerLegend()
-        footer_layout.addWidget(self._speaker_legend)
 
         outer.addWidget(footer_widget)
 
@@ -618,9 +541,27 @@ class TranscriptEditorScreen(QWidget):
             self._dirty = True
             self._update_header()
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._dirty:
+            self._position_dirty_badge()
+
+    def _position_dirty_badge(self) -> None:
+        """Позиционирует оверлей-бейдж строго под кнопкой Сохранить."""
+        btn = self._save_btn
+        badge = self._dirty_badge
+        badge.adjustSize()
+        btn_in_header = btn.mapTo(self._header_bar, btn.rect().bottomLeft())
+        bx = btn_in_header.x() + (btn.width() - badge.width()) // 2
+        by = btn_in_header.y() + 2
+        badge.move(bx, by)
+        badge.raise_()
+
     def _update_header(self) -> None:
-        self._dirty_badge.setVisible(self._dirty)
         self._revert_btn.setEnabled(self._dirty)
+        self._dirty_badge.setVisible(self._dirty)
+        if self._dirty:
+            self._position_dirty_badge()
 
     def _update_footer(self) -> None:
         if self._result:
@@ -629,7 +570,6 @@ class TranscriptEditorScreen(QWidget):
                 f"{len(self._segments)} сегм.  ·  "
                 f"{_fmt_time(self._result.duration_s)}"
             )
-        self._speaker_legend.refresh(self._all_speakers())
 
     # ------------------------------------------------------------------
     # Save / revert
@@ -687,59 +627,3 @@ class TranscriptEditorScreen(QWidget):
                 return
         self.back_requested.emit()
 
-    # ------------------------------------------------------------------
-    # Export (operates on working copy)
-    # ------------------------------------------------------------------
-
-    def _current_as_result(self) -> TranscriptionResult | None:
-        if not self._result:
-            return None
-        self._flush_text()
-        return TranscriptionResult(
-            segments=list(self._segments),
-            run_id=self._result.run_id,
-            run_dir=self._result.run_dir,
-            audio_path=self._result.audio_path,
-            duration_s=self._result.duration_s,
-        )
-
-    def _on_copy_all(self) -> None:
-        result = self._current_as_result()
-        if not result:
-            return
-        report = build_meeting_report(result)
-        lines: list[str] = []
-        for grp in report.speakers:
-            spk = grp.speaker_id or "Unknown"
-            lines.append(
-                f"── {spk} ({_fmt_time(grp.total_duration)}, {len(grp.segments)} сегм.) ──"
-            )
-            for seg in grp.segments:
-                lang = f"[{seg.language}] " if seg.language else ""
-                lines.append(
-                    f"  {_fmt_time(seg.start_time)} – {_fmt_time(seg.end_time)}"
-                    f"  {lang}{seg.text or ''}"
-                )
-        QApplication.clipboard().setText("\n".join(lines))
-
-    def _on_save_json(self) -> None:
-        result = self._current_as_result()
-        if not result:
-            return
-        default_name = f"transcript_{result.run_id}.json"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить JSON", default_name, "JSON (*.json)"
-        )
-        if path:
-            export_json(build_meeting_report(result), Path(path))
-
-    def _on_save_txt(self) -> None:
-        result = self._current_as_result()
-        if not result:
-            return
-        default_name = f"transcript_{result.run_id}.txt"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить TXT", default_name, "Text (*.txt)"
-        )
-        if path:
-            export_txt(build_meeting_report(result), Path(path))
